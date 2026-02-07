@@ -1,0 +1,56 @@
+{
+  "name": "sissyl-lx-manager",
+  "version": "1.0.0",
+  "description": "Sister Sylvester LX Manager - Philips Hue Bridge Management",
+  "main": "electron/main.js",
+"scripts": {
+  "dev": "vite",
+  "server": "node server.js",
+  "start": "concurrently \"npm run server\" \"npm run dev\"",
+  "build": "vite build",
+  "electron:dev": "concurrently --kill-others \"npm run server\" \"npm run dev\" \"sleep 3 && cross-env NODE_ENV=development electron .\"",
+  "electron:build": "npm run build && electron-builder",
+  "electron:build:mac": "npm run build && electron-builder --mac",
+  "electron:build:win": "npm run build && electron-builder --win",
+  "electron:build:linux": "npm run build && electron-builder --linux"
+},
+  "build": {
+    "appId": "com.sistersylvester.lxmanager",
+    "productName": "Sister Sylvester LX Manager",
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "server.js",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.utilities",
+      "target": ["dmg", "zip"],
+      "icon": "build/icon.icns"
+    },
+    "win": {
+      "target": ["nsis", "portable"],
+      "icon": "build/icon.ico"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Utility"
+    }
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "axios": "^1.6.2",
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "concurrently": "^8.2.2",
+    "wait-on": "^7.2.0",
+    "cross-env": "^7.0.3"
+  }
+}
