@@ -444,7 +444,11 @@ const QlabGeneratorPage = ({
   allLoadedGroups, 
   loadAllBridgeGroups, 
   groupV2Ids, 
-  setCurrentPage 
+  setCurrentPage,
+  setSelectedBridge,
+  setHasRunRecognition,          
+  setHasShownRegistrationModal,
+  allBridgeData 
 }) => {
   const [selectedGroupName, setSelectedGroupName] = React.useState('')
   const [onOff, setOnOff] = React.useState('on')
@@ -464,26 +468,43 @@ React.useEffect(() => {
 }, [])
 
 const allBridgeGroups = React.useMemo(() => {
-  const result = []
-  
-  bridges.forEach(bridge => {
-    const bridgeGroups = allLoadedGroups[bridge.ip]
-    
-    if (bridgeGroups) {
+    const groups = [];
+    if (!allLoadedGroups) return groups;
+
+    Object.entries(allLoadedGroups).forEach(([bridgeIp, bridgeGroups]) => {
+      const bridge = bridges.find(b => b.ip === bridgeIp);
+      
       Object.entries(bridgeGroups).forEach(([groupId, group]) => {
-        result.push({
-          bridge,
-          groupId,
-          group,
-          v2Id: groupV2Ids[bridge.ip]?.[groupId]
-        })
-      })
-    }
-  })
-  
-  console.log('All bridge groups:', result)
-  return result
-}, [bridges, allLoadedGroups, groupV2Ids])
+        groups.push({
+          group: group,
+          v2Id: groupV2Ids[bridgeIp]?.[groupId],
+          bridge: bridge,
+          bridgeIp: bridgeIp
+        });
+      });
+    });
+    return groups;
+  }, [allLoadedGroups, bridges, groupV2Ids]);
+
+const allLiveBulbs = React.useMemo(() => {
+    const bulbs = [];
+    // Guard against non-arrays
+    if (!allBridgeData || !Array.isArray(allBridgeData)) return bulbs;
+
+    allBridgeData.forEach(bridge => {
+      // Check bridge.lights (which we attached in App.jsx)
+      if (bridge && bridge.lights) {
+        Object.entries(bridge.lights).forEach(([id, light]) => {
+          bulbs.push({ 
+            ...light, 
+            bridgeLocalId: id,
+            uniqueid: light.uniqueid || light.uniqueId 
+          });
+        });
+      }
+    });
+    return bulbs;
+  }, [allBridgeData]);
 
   // Find group by name
   const groupInfo = React.useMemo(() => {
@@ -557,38 +578,55 @@ const allBridgeGroups = React.useMemo(() => {
   return `rgb(${r}, ${g}, ${b})`
 }
 
-  const generateCurlCommand = () => {
-    if (!groupInfo || !groupInfo.v2Id) {
-      return '// Enter a group name to generate code'
-    }
-    
-    const { bridge, v2Id } = groupInfo
-    
-    let payload = {
-      on: { on: onOff === 'on' }
-    }
-    
-    if (onOff === 'on') {
-      payload.dimming = { brightness: brightness }
-      payload.dynamics = { duration: duration }
-      
-      if (colorMode === 'temp') {
-        payload.color_temperature = { mirek: colorTemp }
-      } else if (colorMode === 'rgb') {
-        const xy = rgbToXy(rgbColor.r, rgbColor.g, rgbColor.b)
-        payload.color = { xy: xy }
-      }
-    }
-    
-    const payloadStr = JSON.stringify(payload).replace(/"/g, '\\"')
-    
-    const script = `do shell script "curl -k -X \\"PUT\\" \\"https://${bridge.ip}/clip/v2/resource/grouped_light/${v2Id}\\" \\\\
-     -H 'hue-application-key: ${bridge.username}' \\\\
-     -H 'Content-Type: application/json' \\\\
-     -d '${payloadStr}'"`
-    
-    return script
+const generateCurlCommand = () => {
+  if (!groupInfo || !groupInfo.v2Id) {
+    return '-- Enter a group name to generate code'
   }
+  
+  const { bridge, v2Id, groupName } = groupInfo
+  
+  let payload = {
+    on: { on: onOff === 'on' }
+  }
+  
+  if (onOff === 'on') {
+    payload.dimming = { brightness: brightness }
+    payload.dynamics = { duration: duration }
+    
+    if (colorMode === 'temp') {
+      payload.color_temperature = { mirek: colorTemp }
+    } else if (colorMode === 'rgb') {
+      const xy = rgbToXy(rgbColor.r, rgbColor.g, rgbColor.b)
+      payload.color = { xy: xy }
+    }
+  }
+  
+  const payloadStr = JSON.stringify(payload, null, 2)
+    .split('\n')
+    .map(line => '  ' + line)
+    .join('\n')
+    .replace(/"/g, '\\"')
+  
+  const script = `tell application id "com.figure53.QLab.5" to tell front workspace
+	tell application "System Events"
+
+		-- START PASTE BELOW --
+		
+		set bridgeIP to "${bridge.ip}"
+		set groupID to "${v2Id}"
+		set apiKey to "${bridge.username}"
+		
+		-- STOP PASTE HERE, DO NOT ADJUST BELOW THIS LINE --
+		
+		do shell script "curl -k -X \\"PUT\\" \\"https://" & bridgeIP & "/clip/v2/resource/grouped_light/" & groupID & "\\" \\\\
+     -H 'hue-application-key: " & apiKey & "' \\\\
+     -H 'Content-Type: application/json; charset=utf-8' \\\\
+     -d $'${payloadStr}'"
+	end tell
+end tell`
+  
+  return script
+}
   
   const handleTestCue = async () => {
     if (!groupInfo || !groupInfo.v2Id) {
@@ -636,29 +674,7 @@ const allBridgeGroups = React.useMemo(() => {
   
   return (
     <div>
-        <div style={{ marginBottom: '24px' }}>
-          <button 
-              onClick={() => {
-                setSelectedBridge(null)
-                setHasRunRecognition(false)
-                setHasShownRegistrationModal(false)
-                }}
-            style={{
-              backgroundColor: '#ffffff',
-              color: '#4a5568',
-              border: '1px solid #e2e8f0',
-              padding: '10px 16px',
-              borderRadius: '6px',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px'
-            }}
-          >
-            <span>←</span> Back to Bridges
-          </button>
+<div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'flex-end' }}>
         </div>
         
         <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px' }}>
@@ -977,16 +993,22 @@ const allBridgeGroups = React.useMemo(() => {
   }
 
   {/*Fleet Management Page Component*/}
-  {/*Fleet Management Page Component*/}
 const FleetManagementPage = ({ 
-  fleetDatabase, 
+  fleetDatabase,
+  allBridgeData,
+  onManageBulb,
   onUpdateBulb,
+  updateBelbMetadata,
   onDeleteBulb,
-  setCurrentPage,
+  onImportFleetData,
+  onBack,
   installations,
   onAddInstallation,
   onRemoveInstallation
 }) => {
+
+console.log("DEBUG: allBridgeData is:", allBridgeData);
+
   const [editingBulb, setEditingBulb] = React.useState(null)
   const [searchTerm, setSearchTerm] = React.useState('')
   const [filterInstallation, setFilterInstallation] = React.useState('all')
@@ -995,49 +1017,150 @@ const FleetManagementPage = ({
   
   const bulbEntries = Object.entries(fleetDatabase)
   
-  const filteredBulbs = bulbEntries.filter(([uniqueId, bulb]) => {
-    const matchesSearch = 
-      bulb.fleetId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      bulb.preferredName?.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchesInstallation = 
-      filterInstallation === 'all' || bulb.currentInstallation === filterInstallation
-    
-    return matchesSearch && matchesInstallation
-  })
+  const allLiveBulbs = React.useMemo(() => {
+      const bulbs = [];
+      if (!allBridgeData) return bulbs;
+      Object.values(allBridgeData).forEach(bridgeData => {
+        if (bridgeData.lights) {
+          Object.entries(bridgeData.lights).forEach(([id, light]) => {
+            bulbs.push({ ...light, bridgeLocalId: id });
+          });
+        }
+      });
+      return bulbs;
+    }, [allBridgeData]);
+
+const handleLocalManage = (bulb) => {
+  console.log("Local Page setting editing bulb:", bulb);
+  setEditingBulb(bulb)
+  if (onManageBulb) onManageBulb(bulb);
+};
+
+const displayedBulbs = allLiveBulbs.filter(bulb => {
+  const metadata = fleetDatabase[bulb.uniqueid];
   
-  return (
-    <div>
-      <div style={{ marginBottom: '24px' }}>
-        <button 
-          onClick={() => setCurrentPage('bridges')}
-          style={{
-            backgroundColor: '#ffffff',
-            color: '#4a5568',
-            border: '1px solid #e2e8f0',
-            padding: '10px 16px',
-            borderRadius: '6px',
-            fontSize: '14px',
-            fontWeight: '500',
-            cursor: 'pointer'
-          }}
-        >
-          <span>←</span> Back to Bridges
-        </button>
+  const matchesInstallation = 
+    filterInstallation === 'all' || 
+    metadata?.currentInstallation === filterInstallation;
+  
+  const matchesSearch = 
+    !searchTerm || 
+    bulb.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    metadata?.fleetId?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    metadata?.preferredName?.toLowerCase().includes(searchTerm.toLowerCase());
+  
+  return matchesSearch && matchesInstallation;
+}).sort((a, b) => {
+  const fleetIdA = fleetDatabase[a.uniqueid]?.fleetId || 'ZZZZZ'; // Unregistered go last
+  const fleetIdB = fleetDatabase[b.uniqueid]?.fleetId || 'ZZZZZ';
+  return fleetIdA.localeCompare(fleetIdB);
+});
+  
+console.log("DEBUG: allLiveBulbs count:", allLiveBulbs.length);
+console.log("DEBUG: displayedBulbs count:", displayedBulbs.length);
+
+return (
+  <div style={{ width: '100%', maxWidth: 'none', padding: '0 20px', boxSizing: 'border-box' }}>
+    
+    {/* Header Row: Title + Action Buttons */}
+    <div style={{ 
+      marginBottom: '24px',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center'
+    }}>
+      <div>
+        <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px' }}>
+          Fleet Manager
+        </h1>
+        <p style={{ color: '#666', margin: 0 }}>
+          Manage your bulb inventory across all installations ({bulbEntries.length} bulbs)
+        </p>
       </div>
       
-      <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px' }}>
-        Fleet Manager
-      </h1>
-      <p style={{ color: '#666', marginBottom: '32px' }}>
-        Manage your bulb inventory across all installations ({bulbEntries.length} bulbs)
-      </p>
+      {/* Export/Import Buttons - Right Aligned */}
+      <div style={{ display: 'flex', gap: '12px' }}>
+        {/* Import Fleet Data */}
+        <label style={{
+          backgroundColor: '#ffffff',
+          color: '#1976d2',
+          border: '1px solid #1976d2',
+          padding: '4px 20px',
+          borderRadius: '6px',
+          fontSize: '12px',
+          fontWeight: '500',
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+          textAlign: 'center',
+          display: 'inline-block'
+        }}
+        onMouseEnter={(e) => e.target.style.backgroundColor = '#1976d21a'}
+        onMouseLeave={(e) => e.target.style.backgroundColor = '#ffffff'}>
+          Import Fleet Data
+          <input 
+            type="file" 
+            accept=".json"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              
+              const reader = new FileReader();
+              reader.onload = (event) => {
+                try {
+                  const importedData = JSON.parse(event.target.result);
+                  
+                  if (confirm(`Import ${Object.keys(importedData).length} bulbs? This will merge with existing data.`)) {
+                    onImportFleetData(importedData);
+                    alert('✓ Fleet data imported successfully!');
+                  }
+                } catch (error) {
+                  alert('Failed to import: Invalid JSON file');
+                  console.error('Import error:', error);
+                }
+              };
+              reader.readAsText(file);
+              e.target.value = '';
+            }}
+            style={{ display: 'none' }}
+          />
+        </label>
+        
+        {/* Export Fleet Data */}
+        <button 
+          onClick={() => {
+            const dataStr = JSON.stringify(fleetDatabase, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `fleet-database-${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            URL.revokeObjectURL(url);
+          }}
+          style={{
+            backgroundColor: '#1976d292',
+            color: '#ffffff',
+            border: 'none',
+            padding: '4px 20px',
+            borderRadius: '6px',
+            fontSize: '12px',
+            fontWeight: '500',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => e.target.style.backgroundColor = '#1976d2'}
+          onMouseLeave={(e) => e.target.style.backgroundColor = '#1976d292'}
+        >
+          Export Fleet Data
+        </button>
+      </div>
+    </div>
       
       <div style={{ 
         display: 'flex', 
         gap: '12px', 
         marginBottom: '24px',
-        flexWrap: 'wrap'
+        width: '100%' // Ensures the search row stretches
       }}>
         <input
           type="text"
@@ -1045,15 +1168,14 @@ const FleetManagementPage = ({
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           style={{
-            flex: 1,
-            minWidth: '250px',
+            flex: 1, // This tells the search bar to take up all available horizontal space
             padding: '10px',
             fontSize: '14px',
             border: '1px solid #cbd5e0',
             borderRadius: '6px'
           }}
         />
-        
+           
         <select
           value={filterInstallation}
           onChange={(e) => setFilterInstallation(e.target.value)}
@@ -1171,41 +1293,172 @@ const FleetManagementPage = ({
         </div>
       )}
       
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        {filteredBulbs.length === 0 ? (
-          <p style={{ color: '#666', textAlign: 'center', padding: '40px' }}>
-            {bulbEntries.length === 0 
-              ? 'No bulbs registered yet. Use "Recognize Fleet Bulbs" to register bulbs.'
-              : 'No bulbs found. Try a different search term.'}
-          </p>
-        ) : (
-          filteredBulbs.map(([uniqueId, bulb]) => (
-            <BulbCard
-              key={uniqueId}
-              uniqueId={uniqueId}
-              bulb={bulb}
-              installations={installations}
-              isEditing={editingBulb === uniqueId}
-              onEdit={() => setEditingBulb(uniqueId)}
-              onSave={(updates) => {
-                onUpdateBulb(uniqueId, updates)
-                setEditingBulb(null)
-              }}
-              onCancel={() => setEditingBulb(null)}
-              onDelete={() => {
-                if (confirm(`Delete ${bulb.fleetId} from fleet database?`)) {
-                  onDeleteBulb(uniqueId)
-                }
-              }}
-            />
-          ))
-        )}
+{editingBulb && (
+  <div style={{
+    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+    display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
+  }}>
+    <div style={{ 
+      backgroundColor: 'white', padding: '32px', borderRadius: '12px', 
+      width: '500px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
+      maxHeight: '90vh', overflowY: 'auto'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: '20px' }}>{fleetDatabase[editingBulb.uniqueid]?.preferredName || editingBulb.name}</h2>
+          <p style={{ margin: 0, fontSize: '12px', color: '#718096' }}>Fleet Management Details</p>
+        </div>
+        <button onClick={() => setEditingBulb(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '24px' }}>&times;</button>
       </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        
+        {/* READ-ONLY TECHNICAL IDS */}
+        <div style={{ backgroundColor: '#f7fafc', padding: '12px', borderRadius: '6px', border: '1px solid #edf2f7' }}>
+          <div style={{ fontSize: '11px', color: '#a0aec0', textTransform: 'uppercase', fontWeight: 'bold' }}>Technical IDs</div>
+          <div style={{ fontSize: '13px', fontFamily: 'monospace', marginTop: '4px' }}>
+            <strong>Unique ID:</strong> {editingBulb.uniqueid}<br/>
+            <strong>Bridge v1 ID:</strong> {editingBulb.bridgeLocalId || 'N/A'}
+          </div>
+        </div>
+        {/* FLEET ID (Rename Convention) */}
+        <div>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>Fleet ID</label>
+          <input 
+            id="edit-fleet-id"
+            style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0' }}
+            defaultValue={fleetDatabase[editingBulb.uniqueid]?.fleetId || ''}
+          />
+        </div>
+        {/* PREFERRED NAME */}
+        <div>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>Name on Bridge</label>
+          <input 
+            id="edit-preferred-name"
+            style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0' }}
+            defaultValue={fleetDatabase[editingBulb.uniqueid]?.preferredName || editingBulb.name}
+          />
+        </div>
+
+        {/* INSTALLATION SELECTOR */}
+        <div>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>Installation Assignment</label>
+          <select 
+            id="edit-installation"
+            style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0' }}
+            defaultValue={fleetDatabase[editingBulb.uniqueid]?.currentInstallation || ''}
+          >
+            <option value="">-- Unallocated --</option>
+            {installations.map(inst => <option key={inst} value={inst}>{inst}</option>)}
+          </select>
+        </div>
+
+        {/* NOTES FIELD */}
+        <div>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>Maintenance Notes</label>
+          <textarea 
+            id="edit-notes"
+            rows="3"
+            style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', resize: 'vertical' }}
+            defaultValue={fleetDatabase[editingBulb.uniqueid]?.notes || ''}
+          />
+        </div>
+
+        {/* SAVE & CLOSE BUTTONS */}
+        <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+<button 
+  onClick={() => {
+    const updates = {
+      fleetId: document.getElementById('edit-fleet-id').value,  // ← ADD THIS
+      preferredName: document.getElementById('edit-preferred-name').value,
+      currentInstallation: document.getElementById('edit-installation').value,
+      notes: document.getElementById('edit-notes').value,
+      lastUpdated: new Date().toISOString()
+    };
+    
+    console.log('Saving updates:', updates);  // ← DEBUG
+    onUpdateBulb(editingBulb.uniqueid, updates);
+    setEditingBulb(null);
+  }}
+  style={{
+    flex: 2, padding: '12px', backgroundColor: '#3182ce', color: 'white',
+    border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600'
+  }}
+>
+  Save Changes
+</button>
+          
+          <button 
+            onClick={() => {
+              if(window.confirm("Remove this bulb from fleet?")) {
+                onDeleteBulb(editingBulb.uniqueid);
+                setEditingBulb(null);
+              }
+            }}
+            style={{
+              flex: 1, padding: '12px', backgroundColor: '#fff5f5', color: '#c53030',
+              border: '1px solid #feb2b2', borderRadius: '6px', cursor: 'pointer'
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+{/* Table Header */}
+<div style={{
+  display: 'grid',
+  gridTemplateColumns: '140px 200px 1fr 80px 80px 80px 100px',
+  gap: '12px',
+  padding: '8px 12px',
+  backgroundColor: '#edf2f7',
+  borderRadius: '6px 6px 0 0',
+  fontSize: '11px',
+  fontWeight: '700',
+  color: '#4a5568',
+  textTransform: 'uppercase',
+  letterSpacing: '0.5px',
+  borderBottom: '2px solid #cbd5e0'
+}}>
+  <div>Fleet ID</div>
+  <div>Name</div>
+  <div>Installation</div>
+  <div>v1 ID</div>
+  <div>Status</div>
+  <div>Brightness</div>
+  <div>Actions</div>
+</div>
+
+{/* Bulb List */}
+<div style={{ 
+  border: '1px solid #e2e8f0',
+  borderRadius: '0 0 6px 6px',
+  overflow: 'hidden',
+  backgroundColor: 'white'
+}}>
+  {displayedBulbs.length === 0 ? (
+    <p style={{ color: '#666', textAlign: 'center', padding: '40px', margin: 0 }}>
+      No bulbs found matching your criteria.
+    </p>
+  ) : (
+    displayedBulbs.map(bulb => (
+      <MergedBulbCard 
+        key={bulb.uniqueid}
+        bulb={bulb}
+        fleetData={fleetDatabase[bulb.uniqueid]}
+        onManage={() => handleLocalManage(bulb)}
+      />
+    ))
+  )}
+</div>
     </div>
   )
 }
 
-{/*Bulb Card Component*/}
 {/*Bulb Card Component*/}
 const BulbCard = ({ uniqueId, bulb, installations, isEditing, onEdit, onSave, onCancel, onDelete }) => {
   const [formData, setFormData] = React.useState({
@@ -1323,19 +1576,32 @@ const BulbCard = ({ uniqueId, bulb, installations, isEditing, onEdit, onSave, on
         </div>
         
         <div style={{ display: 'flex', gap: '8px' }}>
-          <button
-            onClick={() => onSave(formData)}
-            style={{
-              padding: '8px 16px',
-              backgroundColor: '#4CAF50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-              cursor: 'pointer'
-            }}
-          >
-            Save Changes
-          </button>
+<button 
+  onClick={() => {
+    const currentData = fleetDatabase[editingBulb.uniqueid] || {};
+    const updates = {
+      ...currentData, 
+      preferredName: document.getElementById('edit-preferred-name').value,
+      currentInstallation: document.getElementById('edit-installation').value,
+      notes: document.getElementById('edit-notes').value,
+      lastUpdated: new Date().toISOString()
+    };
+    
+    if (onUpdateBulb) {
+      onUpdateBulb(editingBulb.uniqueid, updates);
+    } else if (updateBulbMetadata) {
+      updateBulbMetadata(editingBulb.uniqueid, updates);
+    }
+    
+    setEditingBulb(null);
+  }}
+  style={{
+    flex: 2, padding: '12px', backgroundColor: '#3182ce', color: 'white',
+    border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600'
+  }}
+>
+  Save Changes
+</button>
           <button
             onClick={onCancel}
             style={{
@@ -1488,6 +1754,113 @@ const BulbCard = ({ uniqueId, bulb, installations, isEditing, onEdit, onSave, on
     </div>
   )
 }
+
+const MergedBulbCard = ({ bulb, fleetData, onManage }) => {
+  const displayName = fleetData?.preferredName || bulb?.name || "Unknown Light";
+  const fleetId = fleetData?.fleetId || "UNREGISTERED";
+  const isOnline = bulb?.state?.reachable ?? false;
+  const brightness = bulb?.state?.bri ? Math.round((bulb.state.bri / 254) * 100) : 0;
+  const isOn = bulb?.state?.on ?? false;
+
+  return (
+    <div style={{
+      backgroundColor: 'white',
+      borderBottom: '1px solid #e2e8f0',
+      padding: '8px 12px',
+      display: 'grid',
+      gridTemplateColumns: '140px 200px 1fr 80px 80px 80px 100px',
+      gap: '12px',
+      alignItems: 'center',
+      fontSize: '13px',
+      transition: 'background-color 0.15s'
+    }}
+    onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+    onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+    >
+      {/* Fleet ID */}
+      <div style={{ 
+        fontWeight: '800',
+        fontSize: '16px',
+        color: fleetId === 'UNREGISTERED' ? '#e53e3e' : '#2d3748'
+      }}>
+        {fleetId}
+      </div>
+      
+      {/* Name */}
+      <div style={{ 
+        fontSize: '14px',
+        fontWeight: '500',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap'
+      }}>
+        {displayName}
+      </div>
+      
+      {/* Installation */}
+      <div style={{ 
+        fontSize: '12px',
+        color: '#718096'
+      }}>
+        📍 {fleetData?.currentInstallation || 'Unassigned'}
+      </div>
+      
+      {/* v1 ID */}
+      <div style={{ 
+        fontFamily: 'monospace',
+        fontSize: '12px',
+        color: '#4a5568'
+      }}>
+        {bulb?.bridgeLocalId || 'N/A'}
+      </div>
+      
+      {/* Status */}
+      <div style={{ 
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px'
+      }}>
+        <div style={{ 
+          width: '8px', 
+          height: '8px', 
+          borderRadius: '50%', 
+          backgroundColor: !isOnline ? '#f56565' : isOn ? '#48bb78' : '#cbd5e0'
+        }} />
+        <span style={{ fontSize: '12px', fontWeight: '500' }}>
+          {!isOnline ? 'Offline' : isOn ? 'ON' : 'OFF'}
+        </span>
+      </div>
+      
+      {/* Brightness */}
+      <div style={{ 
+        fontSize: '12px',
+        color: '#4a5568'
+      }}>
+        {brightness}%
+      </div>
+      
+      {/* Action */}
+      <button 
+        onClick={() => onManage && onManage(bulb)}
+        style={{
+          padding: '4px 10px',
+          fontSize: '11px',
+          backgroundColor: '#3182ce',
+          color: 'white',
+          border: 'none',
+          borderRadius: '4px',
+          cursor: 'pointer',
+          fontWeight: '500'
+        }}
+        onMouseEnter={(e) => e.target.style.backgroundColor = '#2c5aa0'}
+        onMouseLeave={(e) => e.target.style.backgroundColor = '#3182ce'}
+      >
+        Manage
+      </button>
+    </div>
+  );
+};
+
 function App() {
 
 const style = document.createElement('style')
@@ -1524,12 +1897,44 @@ document.head.appendChild(style)
   const recognitionInProgress = React.useRef(false)
   const [hasRunRecognition, setHasRunRecognition] = React.useState(false)
   const [hasShownRegistrationModal, setHasShownRegistrationModal] = React.useState(false)
+  const [allLoadedLights, setAllLoadedLights] = React.useState({})
   // Fleet management states
   const [fleetDatabase, setFleetDatabase] = React.useState({})
   const [showFleetPage, setShowFleetPage] = React.useState(false)
   const [unregisteredBulbs, setUnregisteredBulbs] = React.useState([])
   const [showRegistrationModal, setShowRegistrationModal] = React.useState(false)
 
+  const loadAllBridgeGroups = React.useCallback(async () => {
+  const allGroups = {}
+  const allLights = {} // Add this
+  
+  for (const bridge of bridges) {
+    if (bridge.connected && bridge.username) {
+      try {
+        const [groupsData, lightsData] = await Promise.all([
+          hueService.getGroups(bridge.ip, bridge.username),
+          hueService.getLights(bridge.ip, bridge.username) // Add this
+        ])
+        allGroups[bridge.ip] = groupsData
+        allLights[bridge.ip] = lightsData // Store the lights separately
+      } catch (error) {
+        console.error(`Failed to load data for ${bridge.name}:`, error)
+      }
+    }
+  }
+  
+  setAllLoadedGroups(allGroups)
+  setAllLoadedLights(allLights) // Save them to our new state
+}, [bridges])
+
+React.useEffect(() => {
+  const connectedBridges = bridges.filter(b => b.connected && b.username);
+
+  if (connectedBridges.length > 0 && Object.keys(allLoadedLights).length === 0) {
+    console.log("Auto-loading lights for connected bridges...");
+    loadAllBridgeGroups();
+  }
+}, [bridges, allLoadedLights, loadAllBridgeGroups]);
 
   React.useEffect(() => {
   const saved = hueService.getAllBridges()
@@ -1592,6 +1997,14 @@ React.useEffect(() => {
   }
 }, [])
 
+const handleBackToBridges = () => {
+  console.log("Back button clicked - Resetting state");
+  setSelectedBridge(null);
+  setHasRunRecognition(false);
+  setHasShownRegistrationModal(false);
+  setCurrentPage('bridges');
+};
+
 // Save fleet database to localStorage whenever it changes
 const saveFleetDatabase = (newFleetData) => {
   setFleetDatabase(newFleetData)
@@ -1618,25 +2031,21 @@ const registerBulb = (uniqueId, fleetData) => {
 }
 
 // Update bulb metadata
-const updateBulbMetadata = (uniqueId, updates) => {
-  if (!fleetDatabase[uniqueId]) return
+const updateBulbMetadata = (id, updates) => {
+  setFleetDatabase(prev => {
+    const updatedDb = {
+      ...prev,
+      [id]: {
+        ...(prev[id] || {}),
+        ...updates
+      }
+    };
   
-  const newFleetDb = {
-    ...fleetDatabase,
-    [uniqueId]: {
-      ...fleetDatabase[uniqueId],
-      ...updates,
-      history: [
-        ...fleetDatabase[uniqueId].history,
-        {
-          date: new Date().toISOString(),
-          event: updates.event || 'Updated'
-        }
-      ]
-    }
-  }
-  saveFleetDatabase(newFleetDb)
-}
+    localStorage.setItem('fleet_database', JSON.stringify(updatedDb));
+    
+    return updatedDb;
+  });
+};
 
 const recognizeFleetBulbs = async (bridgeIp, username, lightsData) => {
   // Only run recognition once per session
@@ -1877,14 +2286,15 @@ const handleDeleteLight = async (lightId) => {
 
 const generateQlabScript = (groupId) => {
   const v2Id = groupV2Ids[selectedBridge?.ip]?.[groupId]
+  const groupName = groups[groupId]?.name || 'Unknown Group'
   
   if (!v2Id) {
     return '-- No v2 ID available. Add a light to this group first.'
   }
   
-  const script = `do shell script "curl -k -X \\"PUT\\" \\"https://${selectedBridge.ip}/clip/v2/resource/grouped_light/${v2Id}\\" \\\\
-     -H 'hue-application-key: ${selectedBridge.username}' \\\\`
-  
+  const script = `    set bridgeIP to "${selectedBridge.ip}"
+    set groupID to "${v2Id}"
+    set apiKey to "${selectedBridge.username}"`
   return script
 }
 
@@ -1942,12 +2352,13 @@ const loadBridgeData = async (bridge) => {
     saveInstallations(newInstallation)
   }
 
-  const handleUpdateFleetBulb = (uniqueId, updates) => {
-    updateBulbMetadata(uniqueId, {
-      ...updates,
-      event: 'Metadata updated'
-    })
-  }
+ const handleUpdateFleetBulb = (uniqueId, updates) => {
+  console.log('handleUpdateFleetBulb called with:', uniqueId, updates);
+  updateBulbMetadata(uniqueId, {
+    ...updates,
+    event: 'Metadata updated'
+  })
+}
 
   const handleDeleteFleetBulb = (uniqueId) => {
     const newFleetDb = { ...fleetDatabase }
@@ -2056,6 +2467,14 @@ const loadBridgeData = async (bridge) => {
     setEditName('')
   }
 
+  const handleImportFleetData = (importedData) => {
+  const mergedData = {
+    ...fleetDatabase,
+    ...importedData
+  };
+  saveFleetDatabase(mergedData);
+}
+
 // Export API info for Qlab (current functionality)
 const handleExportForQlab = () => {
   if (!selectedBridge) {
@@ -2063,31 +2482,41 @@ const handleExportForQlab = () => {
     return
   }
   
-  const exportData = {
-    bridge: {
-      name: selectedBridge.name,
-      ipAddress: selectedBridge.ip,
-      apiKey: selectedBridge.username
-    },
-    groups: Object.entries(groups).map(([groupId, group]) => ({
-      name: group.name,
-      v1GroupId: groupId,
-      v2GroupedLightId: groupV2Ids[selectedBridge.ip]?.[groupId] || 'Not available',
-      lightCount: group.lights?.length || 0,
-      lightIds: group.lights || []
-    })),
-    exportedAt: new Date().toISOString(),
-    exportedBy: 'Sister Sylvester LX Manager'
-  }
+  let textContent = `BRIDGE: ${selectedBridge.name}
+Exported: ${new Date().toLocaleString()}
+
+set bridgeIP to "${selectedBridge.ip}":
+set apiKey to "${selectedBridge.username}
+
+═══════════════════════════════════════════════════════════════
+AVAILABLE GROUPS
+═══════════════════════════════════════════════════════════════
+
+`
+
+  Object.entries(groups).forEach(([groupId, group]) => {
+    const v2Id = groupV2Ids[selectedBridge.ip]?.[groupId]
+    
+    textContent += `GROUP: ${group.name}
+Lights in this group: ${group.lights?.length || 0}
+
+set groupID to
+${v2Id || 'Not available - refresh groups in app'}
+
+────────────────────────────────────────────────────────────────
+
+`
+  })
   
-  const dataStr = JSON.stringify(exportData, null, 2)
-  const blob = new Blob([dataStr], { type: 'application/json' })
+  const blob = new Blob([textContent], { type: 'text/plain' })
   const url = URL.createObjectURL(blob)
   const link = document.createElement('a')
   link.href = url
-  link.download = `${selectedBridge.name.replace(/\s+/g, '-')}-qlab-${new Date().toISOString().split('T')[0]}.json`
+  link.download = `${selectedBridge.name.replace(/\s+/g, '-')}-QLAB-${new Date().toISOString().split('T')[0]}.txt`
   link.click()
   URL.revokeObjectURL(url)
+  
+  alert('✓ Qlab export file downloaded!')
 }
 
 // Export bridge configuration (to reuse on other computers)
@@ -2203,7 +2632,6 @@ const checkBridgeConnections = async () => {
 setBridgeConnections(connectionStatus)
 }
 
-
 const handleCopyGroupId = (groupId) => {
   navigator.clipboard.writeText(groupId)
   alert(`Group ID ${groupId} copied to clipboard!`)
@@ -2217,26 +2645,18 @@ const handleCopyGroupId = (groupId) => {
     
     return Object.entries(lights).filter(([id]) => !groupedLightIds.has(id))
   }
-
-  const loadAllBridgeGroups = React.useCallback(async () => {
-  const allGroups = {}
   
-  for (const bridge of bridges) {
-    if (bridge.connected && bridge.username) {
-      try {
-        const groupsData = await hueService.getGroups(bridge.ip, bridge.username)
-        allGroups[bridge.ip] = groupsData
-        console.log(`Loaded ${Object.keys(groupsData).length} groups from ${bridge.name}`)
-      } catch (error) {
-        console.error(`Failed to load groups for ${bridge.name}:`, error)
-      }
-    }
-  }
-  
-  setAllLoadedGroups(allGroups)
-}, [bridges])
-
-  return (
+const allBridgeDataWithLights = React.useMemo(() => {
+  return bridges.map(bridge => {
+    const bridgeLights = allLoadedGroups[bridge.ip]; 
+    
+    return {
+      ...bridge,
+      lights: bridgeLights || {} 
+    };
+  });
+}, [bridges, allLoadedGroups]);
+return (
   <div style={{ padding: '40px', fontFamily: 'sans-serif' }}>
     
     {/* Fleet Bulb Registration Modal */}
@@ -2250,161 +2670,234 @@ const handleCopyGroupId = (groupId) => {
       />
     )}
 
-{currentPage === 'generator' && (
-  <QlabGeneratorPage 
-    bridges={bridges}
-    allLoadedGroups={allLoadedGroups}
-    loadAllBridgeGroups={loadAllBridgeGroups}
-    groupV2Ids={groupV2Ids}
-    setCurrentPage={setCurrentPage}
-  />
-)}
-
-{currentPage === 'fleet' && (
-  <FleetManagementPage
-    fleetDatabase={fleetDatabase}
-    onUpdateBulb={handleUpdateFleetBulb}
-    onDeleteBulb={handleDeleteFleetBulb}
-    setCurrentPage={setCurrentPage}
-    installations={installations}
-    onAddInstallation={handleAddInstallation}
-    onRemoveInstallation={handleRemoveInstallation}
-  />
-)}
-
-{currentPage === 'bridges' && (
-      <div>
-    {/* Header when NOT managing a bridge */}
-    {!selectedBridge && (
-      <div style={{ 
-        marginBottom: '32px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center'
+    {/* Header Row: Title + Action Buttons - ALWAYS VISIBLE */}
+    <div style={{ 
+      marginBottom: '24px',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center'
+    }}>
+      <h1 style={{ 
+        margin: 0,
+        fontSize: '28px',
+        fontWeight: '700',
+        color: '#1a202c',
+        letterSpacing: '-0.5px'
       }}>
-        <h1 style={{ 
-          margin: 0,
-          fontSize: '28px',
-          fontWeight: '700',
-          color: '#1a202c',
-          letterSpacing: '-0.5px'
-        }}>
-          Sister Sylvester LX Manager
-        </h1>
-        
-        <div style={{ display: 'flex', gap: '12px' }}>
-          
-  {/* Qlab Generator Button */}        
-      <button 
-        onClick={() => setCurrentPage('generator')}
-        style={{
-          backgroundColor: '#9C27B0',
-          color: 'white',
-          border: 'none',
-          padding: '10px 20px',
-          borderRadius: '6px',
-          fontSize: '14px',
-          fontWeight: '500',
-          cursor: 'pointer'
-        }}
-      >
-        Qlab Generator
-      </button>
+        Sister Sylvester LX Manager
+      </h1>
 
-    {/*Fleet Management Button */}
-    <button 
-    onClick={() => setCurrentPage('fleet')}
-    style={{
-      backgroundColor: '#FF9800',
-      color: 'white',
-      border: 'none',
-      padding: '10px 20px',
-      borderRadius: '6px',
-      fontSize: '14px',
-      fontWeight: '500',
-      cursor: 'pointer'
-    }}
-  >
-    Fleet Manager
-  </button>
-
-   {/* Import Bridge Config */}
-      <label style={{
-        backgroundColor: '#ffffff',
-        color: '#1976d2',
-        border: '1px solid #1976d2',
-        padding: '4px 20px',
-        borderRadius: '6px',
-        fontSize: '12px',
-        fontWeight: '500',
-        cursor: 'pointer',
-        transition: 'all 0.2s'
-      }}
-              onMouseEnter={(e) => e.target.style.backgroundColor = '#1976d21a'}
-        onMouseLeave={(e) => e.target.style.backgroundColor = '#ffffff'}>
-
-        Import Bridge Config
-        <input 
-          type="file" 
-          accept=".json"
-          onChange={handleImportBridgeConfig}
-          style={{ display: 'none' }}
-        />
-      </label>
-      
-      {/* Export Bridge Config */}
-      <button 
-        onClick={handleExportBridgeConfig}
-        style={{
-          backgroundColor: '#1976d292',
-          color: '#ffffff',
-          border: 'none',
+      {/* Action Buttons - Right Aligned */}
+      <div style={{ display: 'flex', gap: '12px' }}>
+        {/* Import Bridge Config */}
+        <label style={{
+          backgroundColor: '#ffffff',
+          color: '#1976d2',
+          border: '1px solid #1976d2',
           padding: '4px 20px',
           borderRadius: '6px',
           fontSize: '12px',
           fontWeight: '500',
           cursor: 'pointer',
-          transition: 'all 0.2s'
+          transition: 'all 0.2s',
+          textAlign: 'center',
+          display: 'inline-block'
         }}
-        onMouseEnter={(e) => e.target.style.backgroundColor = '#1976d2'}
-        onMouseLeave={(e) => e.target.style.backgroundColor = '#1976d292'}
+        onMouseEnter={(e) => e.target.style.backgroundColor = '#1976d21a'}
+        onMouseLeave={(e) => e.target.style.backgroundColor = '#ffffff'}>
+          Import Bridge Config
+          <input 
+            type="file" 
+            accept=".json"
+            onChange={handleImportBridgeConfig}
+            style={{ display: 'none' }}
+          />
+        </label>
+        
+        {/* Export Bridge Config */}
+        <button 
+          onClick={handleExportBridgeConfig}
+          style={{
+            backgroundColor: '#1976d292',
+            color: '#ffffff',
+            border: 'none',
+            padding: '4px 20px',
+            borderRadius: '6px',
+            fontSize: '12px',
+            fontWeight: '500',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => e.target.style.backgroundColor = '#1976d2'}
+          onMouseLeave={(e) => e.target.style.backgroundColor = '#1976d292'}
+        >
+          Export Bridge Config
+        </button>
+
+        {/* Check Connections */}
+        <button 
+          onClick={checkBridgeConnections}
+          style={{
+            backgroundColor: '#1976d292',
+            color: '#ffffff',
+            border: 'none',
+            padding: '4px 20px',
+            borderRadius: '6px',
+            fontSize: '12px',
+            fontWeight: '500',
+            cursor: 'pointer',
+            transition: 'all 0.2s'
+          }}
+          onMouseEnter={(e) => e.target.style.backgroundColor = '#1976d2'}
+          onMouseLeave={(e) => e.target.style.backgroundColor = '#1976d292'}
+        >
+          Check Connections
+        </button>
+      </div>
+    </div>
+
+    {/* Navigation Tabs - ALWAYS VISIBLE */}
+    <div style={{ 
+      marginBottom: '32px',
+      display: 'flex',
+      gap: '4px',
+      borderBottom: '2px solid #e2e8f0',
+      paddingBottom: '0'
+    }}>
+      <button 
+        onClick={() => setCurrentPage('bridges')}
+        style={{
+          backgroundColor: currentPage === 'bridges' ? '#2196F3' : 'transparent',
+          color: currentPage === 'bridges' ? 'white' : '#4a5568',
+          border: 'none',
+          padding: '10px 24px',
+          borderRadius: '6px 6px 0 0',
+          fontSize: '14px',
+          fontWeight: '500',
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+          borderBottom: currentPage === 'bridges' ? '2px solid #2196F3' : 'none',
+          marginBottom: '-2px'
+        }}
+        onMouseEnter={(e) => {
+          if (currentPage !== 'bridges') {
+            e.target.style.backgroundColor = '#f7fafc'
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (currentPage !== 'bridges') {
+            e.target.style.backgroundColor = 'transparent'
+          }
+        }}
       >
-        Export Bridge Config
+        Bridge Manager
       </button>
 
-          <button 
-            onClick={checkBridgeConnections}
-            style={{
-              backgroundColor: '#1976d292',
-              color: '#ffffff',
-              border: '0px solid #e2e8f0',
-              padding: '4px 20px',
-              borderRadius: '6px',
-              fontSize: '12px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
-            onMouseEnter={(e) => {
-              e.target.style.backgroundColor = '#1976d2'
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.backgroundColor = '#1976d292'
-            }}
-          >
-            Check Connections
-          </button>
+      <button 
+        onClick={() => setCurrentPage('fleet')}
+        style={{
+          backgroundColor: currentPage === 'fleet' ? '#FF9800' : 'transparent',
+          color: currentPage === 'fleet' ? 'white' : '#4a5568',
+          border: 'none',
+          padding: '10px 24px',
+          borderRadius: '6px 6px 0 0',
+          fontSize: '14px',
+          fontWeight: '500',
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+          borderBottom: currentPage === 'fleet' ? '2px solid #FF9800' : 'none',
+          marginBottom: '-2px'
+        }}
+        onMouseEnter={(e) => {
+          if (currentPage !== 'fleet') {
+            e.target.style.backgroundColor = '#f7fafc'
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (currentPage !== 'fleet') {
+            e.target.style.backgroundColor = 'transparent'
+          }
+        }}
+      >
+        Fleet Manager
+      </button>
 
-        </div>
-      </div>
+       <button 
+        onClick={() => setCurrentPage('generator')}
+        style={{
+          backgroundColor: currentPage === 'generator' ? '#9C27B0' : 'transparent',
+          color: currentPage === 'generator' ? 'white' : '#4a5568',
+          border: 'none',
+          padding: '10px 24px',
+          borderRadius: '6px 6px 0 0',
+          fontSize: '14px',
+          fontWeight: '500',
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+          borderBottom: currentPage === 'generator' ? '2px solid #9C27B0' : 'none',
+          marginBottom: '-2px'
+        }}
+        onMouseEnter={(e) => {
+          if (currentPage !== 'generator') {
+            e.target.style.backgroundColor = '#f7fafc'
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (currentPage !== 'generator') {
+            e.target.style.backgroundColor = 'transparent'
+          }
+        }}
+      >
+        Qlab Generator
+      </button>
+
+    </div>
+
+    {/* Tab Content */}
+    {currentPage === 'generator' && (
+      <QlabGeneratorPage 
+        bridges={bridges}
+        allLoadedGroups={allLoadedGroups}
+        loadAllBridgeGroups={loadAllBridgeGroups}
+        groupV2Ids={groupV2Ids}
+        setCurrentPage={setCurrentPage}
+        setSelectedBridge={setSelectedBridge}
+        setHasRunRecognition={setHasRunRecognition}
+        setHasShownRegistrationModal={setHasShownRegistrationModal}
+        allBridgeData={allBridgeDataWithLights} 
+      />
     )}
-    
+
+    {currentPage === 'fleet' && (
+      <FleetManagementPage
+        fleetDatabase={fleetDatabase}
+        allBridgeData={bridges.map(b => ({ ...b, lights: allLoadedLights[b.ip] || {} }))}
+        updateBulbMetadata={updateBulbMetadata}
+        onUpdateBulb={handleUpdateFleetBulb}
+        onDeleteBulb={handleDeleteFleetBulb}
+        onManageBulb={(bulb) => {
+          console.log("Managing bulb:", bulb);
+          setEditingLight(bulb);
+        }}
+        onImportFleetData={handleImportFleetData} 
+        onBack={() => setCurrentPage('bridges')}
+        installations={installations}
+        onAddInstallation={handleAddInstallation}
+        onRemoveInstallation={handleRemoveInstallation}
+      />
+    )}
+
+{currentPage === 'bridges' && (
+      <div>
     {/* Header when managing a bridge */}
     {selectedBridge && (
       <div style={{ marginBottom: '20px' }}>
 
         <button 
-          onClick={() => setSelectedBridge(null)}
+          onClick={() => {
+            setSelectedBridge(null);
+            setCurrentPage('bridges');
+          }}
           style={{
             backgroundColor: '#ffffff',
             color: '#4a5568',
@@ -2627,14 +3120,15 @@ const handleCopyGroupId = (groupId) => {
   </div>
 </div>
 
- <div style={{ 
+<div style={{ 
   display: 'grid',
-  gridTemplateColumns: '2fr 1fr 1fr',
-  gap: '16px',
+  gridTemplateColumns: '2fr 1fr 1fr',  // Bridge takes 2 parts, counts take 1 each
+  gap: '12px',
+  width: '100%',
   marginBottom: '24px'
 }}>
 
-{/* Bridge Name Card - Wider */}
+{/* Bridge Name Card */}
 <div style={{
   backgroundColor: '#ffffff',
   border: '1px solid #e2e8f0',
@@ -2697,29 +3191,29 @@ const handleCopyGroupId = (groupId) => {
   </div>
 </div>
 
-  {/* Lights Count Card */}
-  <div style={{
-    backgroundColor: '#ffffff',
-    border: '1px solid #e2e8f0',
-    padding: '16px',
-    borderRadius: '8px',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-  }}>
-    <div style={{ fontSize: '11px', color: '#718096', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Lights</div>
-    <div style={{ fontSize: '24px', fontWeight: '700', color: '#2d3748' }}>{Object.keys(lights).length}</div>
-  </div>
-  
-  {/* Groups Count Card */}
-  <div style={{
-    backgroundColor: '#ffffff',
-    border: '1px solid #e2e8f0',
-    padding: '16px',
-    borderRadius: '8px',
-    boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-  }}>
-    <div style={{ fontSize: '11px', color: '#718096', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Groups</div>
-    <div style={{ fontSize: '24px', fontWeight: '700', color: '#2d3748' }}>{Object.keys(groups).length}</div>
-  </div>
+{/* Lights Count Card */}
+<div style={{
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
+  padding: '16px',
+  borderRadius: '8px',
+  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+}}>
+  <div style={{ fontSize: '11px', color: '#718096', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Lights</div>
+  <div style={{ fontSize: '24px', fontWeight: '700', color: '#2d3748' }}>{Object.keys(lights).length}</div>
+</div>
+
+{/* Groups Count Card */}
+<div style={{
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
+  padding: '16px',
+  borderRadius: '8px',
+  boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+}}>
+  <div style={{ fontSize: '11px', color: '#718096', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Groups</div>
+  <div style={{ fontSize: '24px', fontWeight: '700', color: '#2d3748' }}>{Object.keys(groups).length}</div>
+</div>
 </div>
 </div>
 
@@ -3307,7 +3801,7 @@ const handleCopyGroupId = (groupId) => {
 }}>
   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
     <h4 style={{ margin: 0, fontSize: '13px', fontWeight: '600', color: '#4a5568' }}>
-      Qlab Curl Command
+      Qlab Replacement Info
     </h4>
     <div style={{ display: 'flex', gap: '8px' }}>
       <button
