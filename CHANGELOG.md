@@ -2,6 +2,14 @@
 
 All notable changes to Sister Sylvester LX Manager will be documented in this file.
 
+## [1.1.6] - 2026-04-08
+
+### Added
+- Sister Sylvester logo in app header
+- Circular logo design with clean border
+
+---
+
 ## [1.1.4] - 2026-04-08
 
 ### Added
