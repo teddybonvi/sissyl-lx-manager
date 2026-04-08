@@ -16,9 +16,9 @@ const httpsAgent = new https.Agent({
 })
 
 // Proxy endpoint to fetch v2 grouped_light IDs
-app.get('/api/hue-v2/:bridgeIp/grouped-lights', async (req, res) => {
+app.get('/api/hue-v2/:bridgeIp/grouped-light', async (req, res) => {
   const { bridgeIp } = req.params
-  const apiKey = req.query.apiKey
+  const apiKey = req.headers['hue-application-key']
   
   if (!apiKey) {
     return res.status(400).json({ error: 'apiKey query parameter required' })

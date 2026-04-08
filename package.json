@@ -1,6 +1,6 @@
 {
   "name": "sissyl-lx-manager",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "type": "module",
   "description": "Sister Sylvester LX Manager - Philips Hue Bridge Management",
   "main": "electron/main.js",
@@ -37,27 +37,6 @@
       ],
       "icon": "assets/icon.icns"
     },
-    "dmg": {
-  "contents": [
-    {
-      "x": 130,
-      "y": 220,
-      "type": "file"
-    },
-    {
-      "x": 410,
-      "y": 220,
-      "type": "link",
-      "path": "/Applications"
-    },
-    {
-      "x": 270,
-      "y": 350,
-      "type": "file",
-      "path": "install-sissyl.command"
-    }
-  ]
-},
     "win": {
       "target": [
         "nsis",

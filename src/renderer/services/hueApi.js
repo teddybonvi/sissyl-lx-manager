@@ -272,12 +272,15 @@ async createGroup(bridgeIp, username, groupName, lightIds = []) {
     }
   }
 
-  // NEW: Get v2 grouped_light IDs
 async getGroupedLightIds(bridgeIp, username) {
   try {
-    // Call our local proxy server instead of the bridge directly
     const response = await axios.get(
-      `http://localhost:3001/api/hue-v2/${bridgeIp}/grouped-lights?apiKey=${username}`
+      `http://localhost:3001/api/hue-v2/${bridgeIp}/grouped-light`,
+      {
+        headers: {
+          'hue-application-key': username
+        }
+      }
     )
     
     if (response.data.success) {

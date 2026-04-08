@@ -2,6 +2,8 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import hueService from './services/hueApi.js'
 
+const CONFIG_FILE_PATH = '/Volumes/EDIT LOCAL/SISYL_Local/_LX Management/config/sissyl-lx-config.json'
+
 const ColorWheel = ({ color, onChange }) => {
   const canvasRef = React.useRef(null)
   const [isDragging, setIsDragging] = React.useState(false)
@@ -204,24 +206,30 @@ const BulbRegistrationModal = ({
   const currentBulb = bulbs[currentIndex]
   const progress = `${currentIndex + 1} of ${bulbs.length}`
   
-  const handleRegister = () => {
-    onRegister(currentBulb.light.uniqueid, formData)
-    
-    // Move to next bulb or close
-    if (currentIndex < bulbs.length - 1) {
-      setCurrentIndex(currentIndex + 1)
-      // Reset form for next bulb
-      setFormData({
-        fleetId: '',
-        preferredName: '',
-        installation: formData.installation, // Keep installation
-        purchaseDate: formData.purchaseDate, // Keep date
-        notes: ''
-      })
-    } else {
-      onClose()
-    }
+const handleRegister = () => {
+  const region = detectBulbRegion(currentBulb.light.modelid)
+
+  onRegister(currentBulb.light.uniqueid, {
+    ...formData,
+    region: region,
+    modelId: currentBulb.light.modelid
+  })
+  
+  // Move to next bulb or close
+  if (currentIndex < bulbs.length - 1) {
+    setCurrentIndex(currentIndex + 1)
+    // Reset form for next bulb
+    setFormData({
+      fleetId: '',
+      preferredName: '',
+      installation: formData.installation,
+      purchaseDate: formData.purchaseDate, 
+      notes: ''
+    })
+  } else {
+    onClose()
   }
+}
   
   const handleSkip = () => {
     onSkip(currentBulb.light.uniqueid)
@@ -448,7 +456,8 @@ const QlabGeneratorPage = ({
   setSelectedBridge,
   setHasRunRecognition,          
   setHasShownRegistrationModal,
-  allBridgeData 
+  allBridgeData,
+  fleetDatabase
 }) => {
   const [selectedGroupName, setSelectedGroupName] = React.useState('')
   const [onOff, setOnOff] = React.useState('on')
@@ -485,26 +494,6 @@ const allBridgeGroups = React.useMemo(() => {
     });
     return groups;
   }, [allLoadedGroups, bridges, groupV2Ids]);
-
-const allLiveBulbs = React.useMemo(() => {
-    const bulbs = [];
-    // Guard against non-arrays
-    if (!allBridgeData || !Array.isArray(allBridgeData)) return bulbs;
-
-    allBridgeData.forEach(bridge => {
-      // Check bridge.lights (which we attached in App.jsx)
-      if (bridge && bridge.lights) {
-        Object.entries(bridge.lights).forEach(([id, light]) => {
-          bulbs.push({ 
-            ...light, 
-            bridgeLocalId: id,
-            uniqueid: light.uniqueid || light.uniqueId 
-          });
-        });
-      }
-    });
-    return bulbs;
-  }, [allBridgeData]);
 
   // Find group by name
   const groupInfo = React.useMemo(() => {
@@ -672,6 +661,8 @@ end tell`
     }
   }
   
+
+
   return (
     <div>
 <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'flex-end' }}>
@@ -681,7 +672,7 @@ end tell`
           Qlab Cue Generator
         </h1>
         <p style={{ color: '#666', marginBottom: '32px' }}>
-          Create custom lighting cues for Qlab with precise control over brightness, fade time, and color.
+          Build LX cues and generate apple script to paste into Qlab script cues
         </p>
         
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
@@ -996,6 +987,7 @@ end tell`
 const FleetManagementPage = ({ 
   fleetDatabase,
   allBridgeData,
+  allLoadedGroups,
   onManageBulb,
   onUpdateBulb,
   updateBelbMetadata,
@@ -1017,18 +1009,52 @@ console.log("DEBUG: allBridgeData is:", allBridgeData);
   
   const bulbEntries = Object.entries(fleetDatabase)
   
-  const allLiveBulbs = React.useMemo(() => {
-      const bulbs = [];
-      if (!allBridgeData) return bulbs;
-      Object.values(allBridgeData).forEach(bridgeData => {
-        if (bridgeData.lights) {
-          Object.entries(bridgeData.lights).forEach(([id, light]) => {
-            bulbs.push({ ...light, bridgeLocalId: id });
-          });
-        }
-      });
-      return bulbs;
-    }, [allBridgeData]);
+const allLiveBulbs = React.useMemo(() => {
+  const bulbs = [];
+  const seenIds = new Set()  // ← Track which bulbs we've added
+
+  // First add all LIVE bulbs from bridges
+  if (allBridgeData && Array.isArray(allBridgeData)) {
+    allBridgeData.forEach(bridge => {
+      if (bridge && bridge.lights) {
+        Object.entries(bridge.lights).forEach(([id, light]) => {
+          const uniqueid = light.uniqueid || light.uniqueId
+          if (uniqueid) {
+            seenIds.add(uniqueid)
+            bulbs.push({ 
+              ...light, 
+              bridgeLocalId: id,
+              uniqueid: uniqueid,
+              isLive: true
+            })
+          }
+        })
+      }
+    })
+  }
+
+  console.log('Live bulbs from bridges:', bulbs.length)
+  console.log('Fleet database entries:', Object.keys(fleetDatabase).length)
+
+
+  // Then add registered bulbs NOT currently live
+  Object.entries(fleetDatabase).forEach(([uniqueid, bulbData]) => {
+    if (!seenIds.has(uniqueid)) {
+      console.log('Adding offline bulb:', bulbData.preferredName)
+      bulbs.push({
+        uniqueid,
+        name: bulbData.preferredName || bulbData.fleetId || 'Unknown',
+        bridgeLocalId: bulbData.currentLightId || 'N/A',
+        isLive: false,
+        state: { reachable: false, on: false, bri: 0 }
+      })
+    }
+  })
+
+  console.log('Total bulbs:', bulbs.length)
+  return bulbs
+
+}, [allBridgeData, fleetDatabase])
 
 const handleLocalManage = (bulb) => {
   console.log("Local Page setting editing bulb:", bulb);
@@ -1074,7 +1100,7 @@ return (
           Fleet Manager
         </h1>
         <p style={{ color: '#666', margin: 0 }}>
-          Manage your bulb inventory across all installations ({bulbEntries.length} bulbs)
+          Manage LX inventory across all installations ({bulbEntries.length} bulbs)
         </p>
       </div>
       
@@ -1412,7 +1438,7 @@ return (
 {/* Table Header */}
 <div style={{
   display: 'grid',
-  gridTemplateColumns: '140px 200px 1fr 80px 80px 80px 100px',
+  gridTemplateColumns: '180px 200px 1fr 1fr 60px 80px 80px 80px 100px',
   gap: '12px',
   padding: '8px 12px',
   backgroundColor: '#edf2f7',
@@ -1427,6 +1453,8 @@ return (
   <div>Fleet ID</div>
   <div>Name</div>
   <div>Installation</div>
+  <div>Groups</div>
+  <div>Region</div>
   <div>v1 ID</div>
   <div>Status</div>
   <div>Brightness</div>
@@ -1755,7 +1783,7 @@ const BulbCard = ({ uniqueId, bulb, installations, isEditing, onEdit, onSave, on
   )
 }
 
-const MergedBulbCard = ({ bulb, fleetData, onManage }) => {
+const MergedBulbCard = ({ bulb, fleetData, groups, onManage }) => {
   const displayName = fleetData?.preferredName || bulb?.name || "Unknown Light";
   const fleetId = fleetData?.fleetId || "UNREGISTERED";
   const isOnline = bulb?.state?.reachable ?? false;
@@ -1768,7 +1796,7 @@ const MergedBulbCard = ({ bulb, fleetData, onManage }) => {
       borderBottom: '1px solid #e2e8f0',
       padding: '8px 12px',
       display: 'grid',
-      gridTemplateColumns: '140px 200px 1fr 80px 80px 80px 100px',
+      gridTemplateColumns: '180px 200px 1fr 1fr 60px 80px 80px 80px 100px',
       gap: '12px',
       alignItems: 'center',
       fontSize: '13px',
@@ -1805,6 +1833,28 @@ const MergedBulbCard = ({ bulb, fleetData, onManage }) => {
         📍 {fleetData?.currentInstallation || 'Unassigned'}
       </div>
       
+      {/* Groups */}
+      <div style={{ 
+        fontSize: '12px',
+        color: '#718096'
+      }}>
+        {fleetData?.currentGroup 
+          ? fleetData.currentGroup
+          : <span style={{ color: '#cbd5e0', fontStyle: 'italic' }}>No group</span>
+        }
+      </div>
+
+      {/* Region */}
+      <div style={{ 
+        fontSize: '11px',
+        fontWeight: '600',
+        color: fleetData?.region === 'US' ? '#2563eb' : 
+              fleetData?.region === 'EU' ? '#16a34a' :
+              fleetData?.region === 'UK' ? '#dc2626' : '#9ca3af'
+      }}>
+        {fleetData?.region || '?'}
+      </div>
+
       {/* v1 ID */}
       <div style={{ 
         fontFamily: 'monospace',
@@ -1861,6 +1911,744 @@ const MergedBulbCard = ({ bulb, fleetData, onManage }) => {
   );
 };
 
+const LiveMonitorPage = ({ bridges, allLoadedGroups, allLoadedLights }) => {
+  const [selectedBridgeIp, setSelectedBridgeIp] = React.useState(null)
+  const [liveGroups, setLiveGroups] = React.useState({})
+  const [lastUpdate, setLastUpdate] = React.useState(null)
+
+  // Auto-refresh every 2 seconds
+  React.useEffect(() => {
+    if (!selectedBridgeIp) return
+    
+    // Don't auto-refresh if we're showing mock data
+    const hasMockData = Object.values(liveGroups).some(g => g.isLive === false)
+    if (hasMockData && Object.keys(liveGroups).length > 0) return
+
+    const fetchLiveData = async () => {
+      const bridge = bridges.find(b => b.ip === selectedBridgeIp)
+      if (!bridge) return
+
+      try {
+        const lightsData = await hueService.getLights(bridge.ip, bridge.username)
+        const groupsData = allLoadedGroups[selectedBridgeIp] || {}
+
+        const updatedGroups = {}
+        Object.entries(groupsData).forEach(([groupId, group]) => {
+          const groupLights = group.lights || []
+          const lightStates = groupLights.map(lightId => {
+            const light = lightsData[lightId]
+            return light ? {
+              id: lightId,
+              name: light.name,
+              on: light.state?.on || false,
+              reachable: light.state?.reachable || false,
+              brightness: light.state?.bri || 0,
+              hue: light.state?.hue,
+              sat: light.state?.sat,
+              ct: light.state?.ct,
+              xy: light.state?.xy
+            } : null
+          }).filter(Boolean)
+
+          const anyOn = lightStates.some(l => l.on)
+          const allReachable = lightStates.every(l => l.reachable)
+          const avgBri = lightStates.length > 0
+            ? Math.round(lightStates.reduce((sum, l) => sum + l.brightness, 0) / lightStates.length)
+            : 0
+
+          updatedGroups[groupId] = {
+            ...group,
+            isOn: anyOn,
+            isReachable: allReachable,
+            brightness: avgBri,
+            lightCount: lightStates.length,
+            lightStates: lightStates,
+            isLive: true
+          }
+        })
+
+        setLiveGroups(updatedGroups)
+        setLastUpdate(new Date())
+      } catch (error) {
+        console.log('Bridge offline - showing last known state')
+        
+        const groupsData = allLoadedGroups[selectedBridgeIp] || {}
+        const offlineGroups = {}
+        
+        Object.entries(groupsData).forEach(([groupId, group]) => {
+          offlineGroups[groupId] = {
+            ...group,
+            isOn: false,
+            isReachable: false,
+            brightness: 0,
+            lightCount: group.lights?.length || 0,
+            lightStates: [],
+            isLive: false
+          }
+        })
+        
+        setLiveGroups(offlineGroups)
+        setLastUpdate(new Date())
+      }
+    }
+
+    fetchLiveData()
+    const interval = setInterval(fetchLiveData, 500)
+
+    return () => clearInterval(interval)
+  }, [selectedBridgeIp, bridges, allLoadedGroups])
+
+  // Convert Hue color values to RGB for display
+const getColorFromState = (light) => {
+  if (!light.on) return '#4b5563' // Gray when off
+  
+  // If has color temp (CT)
+  if (light.ct && !light.xy) {
+    const mirek = light.ct
+    const kelvin = 1000000 / mirek
+    
+    // Warm white (< 3500K) - orange
+    if (kelvin < 3500) {
+      const warmness = Math.max(0, Math.min(1, (3500 - kelvin) / 1000))
+      return `rgb(255, ${Math.round(200 - warmness * 50)}, ${Math.round(100 - warmness * 50)})`
+    }
+    // Cool white (> 5000K) - blue-white
+    else if (kelvin > 5000) {
+      const coolness = Math.max(0, Math.min(1, (kelvin - 5000) / 1500))
+      return `rgb(${Math.round(230 - coolness * 30)}, ${Math.round(240 - coolness * 20)}, 255)`
+    }
+    // Neutral white (3500-5000K)
+    else {
+      return '#fff8dc'
+    }
+  }
+  
+  // If has XY color (RGB mode)
+  if (light.xy && Array.isArray(light.xy)) {
+    const [x, y] = light.xy
+    const z = 1 - x - y
+    
+    // XY to RGB conversion
+    let r = x * 3.2406 + y * -1.5372 + z * -0.4986
+    let g = x * -0.9689 + y * 1.8758 + z * 0.0415
+    let b = x * 0.0557 + y * -0.2040 + z * 1.0570
+    
+    // Apply gamma correction
+    r = r > 0.0031308 ? 1.055 * Math.pow(r, 1/2.4) - 0.055 : 12.92 * r
+    g = g > 0.0031308 ? 1.055 * Math.pow(g, 1/2.4) - 0.055 : 12.92 * g
+    b = b > 0.0031308 ? 1.055 * Math.pow(b, 1/2.4) - 0.055 : 12.92 * b
+    
+    // Clamp and convert to 0-255
+    r = Math.max(0, Math.min(1, r)) * 255
+    g = Math.max(0, Math.min(1, g)) * 255
+    b = Math.max(0, Math.min(1, b)) * 255
+    
+    return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`
+  }
+  
+  // Default warm white
+  return '#fbbf24'
+}
+
+  return (
+    <div style={{ width: '100%', maxWidth: 'none', padding: '0 20px', boxSizing: 'border-box' }}>
+      <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px' }}>
+        Live Group Monitor
+      </h1>
+      <p style={{ color: '#666', marginBottom: '32px' }}>
+        Real-time status monitoring for all groups
+      </p>
+
+      {/* Bridge Selector */}
+      <div style={{ marginBottom: '24px' }}>
+        <label style={{ display: 'block', fontWeight: '600', marginBottom: '8px' }}>
+          Select Bridge:
+        </label>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+          <select
+            value={selectedBridgeIp || ''}
+            onChange={(e) => setSelectedBridgeIp(e.target.value)}
+            style={{
+              padding: '10px',
+              fontSize: '14px',
+              border: '1px solid #cbd5e0',
+              borderRadius: '6px',
+              minWidth: '300px'
+            }}
+          >
+            <option value="">-- Select a bridge --</option>
+            {bridges.map(bridge => (
+              <option key={bridge.ip} value={bridge.ip}>
+                {bridge.name} ({bridge.ip})
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Last Update Time */}
+      {lastUpdate && (
+        <div style={{ 
+          fontSize: '12px', 
+          color: '#718096', 
+          marginBottom: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <div style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            backgroundColor: Object.values(liveGroups).some(g => g.isLive) ? '#48bb78' : '#fbbf24',
+            animation: Object.values(liveGroups).some(g => g.isLive) ? 'pulse 2s infinite' : 'none'
+          }} />
+          {Object.values(liveGroups).some(g => g.isLive) 
+            ? `Live • Last updated: ${lastUpdate.toLocaleTimeString()}`
+            : `Offline • Showing cached data from ${lastUpdate.toLocaleTimeString()}`
+          }
+        </div>
+      )}
+
+      {/* Groups Display */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {Object.entries(liveGroups).map(([groupId, group]) => {
+          const brightnessPercent = Math.round((group.brightness / 254) * 100)
+          
+          return (
+            <div
+              key={groupId}
+              style={{
+                backgroundColor: 'white',
+                border: '2px solid ' + (
+                  !group.isLive ? '#fbbf24' :
+                  group.isOn ? '#48bb78' :
+                  '#e2e8f0'
+                ),
+                borderRadius: '8px',
+                padding: '20px',
+                transition: 'all 0.3s',
+                opacity: group.isLive ? 1 : 0.7
+              }}
+            >
+              {/* Group Name & Status */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>
+                  {group.name}
+                </h3>
+                <div style={{
+                  padding: '4px 12px',
+                  borderRadius: '12px',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  backgroundColor: group.isOn ? '#d1fae5' : '#f3f4f6',
+                  color: group.isOn ? '#065f46' : '#6b7280'
+                }}>
+                  {group.isOn ? '● ON' : '○ OFF'}
+                </div>
+              </div>
+
+              {/* Brightness Bar */}
+              <div style={{ marginBottom: '12px' }}>
+                <div style={{
+                  height: '24px',
+                  backgroundColor: '#e5e7eb',
+                  borderRadius: '4px',
+                  overflow: 'hidden',
+                  position: 'relative'
+                }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${brightnessPercent}%`,
+                    background: (() => {
+                      if (!group.isOn) return '#9ca3af'
+                      if (!group.lightStates || group.lightStates.length === 0) return '#fbbf24'
+                      
+                      // Create gradient from all ON lights (ignore reachable status)
+                      const colors = group.lightStates
+                        .filter(l => l.on)  // ← REMOVED && l.reachable
+                        .map(l => getColorFromState(l))
+                      
+                      if (colors.length === 0) return '#9ca3af'
+                      if (colors.length === 1) return colors[0]
+                      
+                      // Linear gradient across all colors
+                      return `linear-gradient(to right, ${colors.join(', ')})`
+                    })(),
+                    transition: 'width 0.3s, background 0.3s'
+                  }}>
+                    <span style={{
+                      position: 'absolute',
+                      left: '50%',
+                      top: '50%',
+                      transform: 'translate(-50%, -50%)',
+                      fontSize: '12px',
+                      fontWeight: '600',
+                      color: '#1f2937',
+                      textShadow: '0 0 4px white'
+                    }}>
+                      {brightnessPercent}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+            {/* Individual Bulb Indicators */}
+              {group.lightStates && group.lightStates.length > 0 && (
+                <div style={{ 
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: '6px',
+                  marginTop: '12px'
+                }}>
+                  {group.lightStates.map(light => {
+                    const color = getColorFromState(light)
+                    
+                    return (
+                      <div
+                        key={light.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          backgroundColor: '#f9fafb',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '4px',
+                          padding: '4px 8px',
+                          opacity: light.reachable ? 1 : 0.5
+                        }}
+                        title={`${light.name} - ${!light.reachable ? 'OFFLINE' : light.on ? Math.round((light.brightness / 254) * 100) + '%' : 'OFF'}`}
+                      >
+                        {/* Color/Status Indicator */}
+                        <div style={{
+                          width: '16px',
+                          height: '16px',
+                          borderRadius: '50%',
+                          backgroundColor: color,
+                          border: '2px solid #d1d5db',
+                          flexShrink: 0,
+                          boxShadow: light.on && light.reachable ? `0 0 6px ${color}` : 'none',
+                          transition: 'all 0.3s',
+                          position: 'relative'
+                        }}>
+                          {!light.reachable && (
+                            <div style={{
+                              position: 'absolute',
+                              top: '-2px',
+                              right: '-2px',
+                              fontSize: '10px'
+                            }}>⚠️</div>
+                          )}
+                        </div>
+                        
+                        {/* Light Name */}
+                        <div style={{
+                          fontSize: '10px',
+                          fontWeight: '500',
+                          color: '#374151',
+                          maxWidth: '80px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {light.name}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* Light Count */}
+              <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '8px' }}>
+                {group.lightCount} light{group.lightCount !== 1 ? 's' : ''} 
+                {!group.isReachable && <span style={{ color: '#ef4444' }}> • Some offline</span>}
+              </div>
+            </div>
+          )
+        })}
+
+        {selectedBridgeIp && Object.keys(liveGroups).length === 0 && (
+          <p style={{ textAlign: 'center', color: '#9ca3af', padding: '40px' }}>
+            No groups found on this bridge
+          </p>
+        )}
+
+        {!selectedBridgeIp && Object.keys(liveGroups).length === 0 && (
+          <p style={{ textAlign: 'center', color: '#9ca3af', padding: '40px' }}>
+            Select a bridge to view live group status
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const NetworkDiagnosticsPage = ({ bridges, bridgeConnections }) => {
+  const [diagnosticResults, setDiagnosticResults] = React.useState({})
+  const [scanning, setScanning] = React.useState(false)
+  const [selectedBridge, setSelectedBridge] = React.useState(null)
+
+  const runDiagnostics = async (bridge) => {
+    console.log('Starting diagnostics for:', bridge.name)
+    setRunningDiagnostics(true)
+
+    const results = {
+      bridgeIp: bridge.ip,
+      bridgeName: bridge.name,
+      tests: []
+    }
+
+    // Test 1: Basic Connectivity
+     console.log('Test 1: Testing connectivity...')
+    const connectStart = performance.now()
+    try {
+      const response = await fetch(`http://${bridge.ip}/api/${bridge.username}/config`)
+      console.log('Response:', response.status)
+      const connectEnd = performance.now()
+      const responseTime = Math.round(connectEnd - connectStart)
+      
+      if (response.ok) {
+        const config = await response.json()
+        console.log('Config:', config)
+        results.tests.push({
+          name: 'Bridge Reachability',
+          status: 'pass',
+          message: `Connected successfully (${responseTime}ms)`,
+          details: `Bridge Name: ${config.name}, Firmware: ${config.swversion}`
+        })
+      } else {
+        results.tests.push({
+          name: 'Bridge Reachability',
+          status: 'fail',
+          message: `HTTP ${response.status}`
+        })
+      }
+    } catch (error) {
+      console.error('Test 1 error:', error)
+      results.tests.push({
+        name: 'Bridge Reachability',
+        status: 'fail',
+        message: `Cannot reach bridge: ${error.message}`
+      })
+    }
+
+    // Test 2: API Performance
+    try {
+      const perfStart = performance.now()
+      await hueService.getLights(bridge.ip, bridge.username)
+      const perfEnd = performance.now()
+      const apiTime = Math.round(perfEnd - perfStart)
+      
+      results.tests.push({
+        name: 'API Response Speed',
+        status: apiTime < 500 ? 'pass' : apiTime < 2000 ? 'warning' : 'fail',
+        message: `${apiTime}ms`
+      })
+    } catch (error) {
+      results.tests.push({
+        name: 'API Response Speed',
+        status: 'fail',
+        message: error.message
+      })
+    }
+
+    // Test 3: Light Discovery
+    try {
+      const lights = await hueService.getLights(bridge.ip, bridge.username)
+      const lightCount = Object.keys(lights).length
+      const reachableLights = Object.values(lights).filter(l => l.state?.reachable).length
+      
+      results.tests.push({
+        name: 'Light Discovery',
+        status: lightCount > 0 ? 'pass' : 'warning',
+        message: `${lightCount} lights, ${reachableLights} reachable`
+      })
+    } catch (error) {
+      results.tests.push({
+        name: 'Light Discovery',
+        status: 'fail',
+        message: error.message
+      })
+    }
+
+      console.log('Results so far:', results)
+     console.log('Setting results and stopping spinner')
+    setDiagnosticResults(prev => ({ ...prev, [bridge.ip]: results }))
+    setRunningDiagnostics(false)
+    console.log('Diagnostics complete!')
+  }
+
+  return (
+    <div style={{ width: '100%', maxWidth: 'none', padding: '0 20px', boxSizing: 'border-box' }}>
+      <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px' }}>
+        Network Diagnostics
+      </h1>
+      <p style={{ color: '#666', marginBottom: '32px' }}>
+        Test bridge connectivity, performance, and troubleshoot network issues
+      </p>
+
+      {/* Action Buttons */}
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
+        <button
+          onClick={runAllDiagnostics}
+          disabled={scanning || bridges.length === 0}
+          style={{
+            padding: '12px 24px',
+            backgroundColor: scanning ? '#cbd5e0' : '#EF4444',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            fontSize: '14px',
+            fontWeight: '600',
+            cursor: scanning || bridges.length === 0 ? 'not-allowed' : 'pointer',
+            opacity: bridges.length === 0 ? 0.5 : 1
+          }}
+        >
+          {scanning ? '⏳ Scanning...' : '🔍 Test All Bridges'}
+        </button>
+      </div>
+
+      {/* Bridge List */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        {bridges.map(bridge => {
+          const result = diagnosticResults[bridge.ip]
+          const isOnline = bridgeConnections[bridge.id]
+          
+          return (
+            <div
+              key={bridge.ip}
+              style={{
+                backgroundColor: 'white',
+                border: '2px solid ' + (isOnline ? '#48bb78' : '#e2e8f0'),
+                borderRadius: '8px',
+                padding: '20px'
+              }}
+            >
+              {/* Bridge Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '600' }}>
+                    {bridge.name}
+                  </h3>
+                  <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '4px', fontFamily: 'monospace' }}>
+                    {bridge.ip}
+                  </div>
+                </div>
+                
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <div style={{
+                    padding: '4px 12px',
+                    borderRadius: '12px',
+                    fontSize: '12px',
+                    fontWeight: '600',
+                    backgroundColor: isOnline ? '#d1fae5' : '#fee2e2',
+                    color: isOnline ? '#065f46' : '#991b1b'
+                  }}>
+                    {isOnline ? '● ONLINE' : '● OFFLINE'}
+                  </div>
+                  
+                  <button
+                    onClick={() => runDiagnostics(bridge)}
+                    disabled={scanning}
+                    style={{
+                      padding: '8px 16px',
+                      backgroundColor: '#3b82f6',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontSize: '12px',
+                      fontWeight: '500',
+                      cursor: scanning ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    Test Bridge
+                  </button>
+                </div>
+              </div>
+
+              {/* Diagnostic Results */}
+              {result && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {result.tests.map((test, idx) => {
+                    const statusColors = {
+                      pass: { bg: '#d1fae5', border: '#48bb78', text: '#065f46', icon: '✓' },
+                      warning: { bg: '#fef3c7', border: '#fbbf24', text: '#78350f', icon: '⚠' },
+                      fail: { bg: '#fee2e2', border: '#ef4444', text: '#991b1b', icon: '✗' },
+                      info: { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af', icon: 'ℹ' }
+                    }
+                    const colors = statusColors[test.status]
+                    
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          backgroundColor: colors.bg,
+                          border: `1px solid ${colors.border}`,
+                          borderRadius: '6px',
+                          padding: '12px'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'start', gap: '8px' }}>
+                          <div style={{
+                            width: '20px',
+                            height: '20px',
+                            borderRadius: '50%',
+                            backgroundColor: colors.border,
+                            color: 'white',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '12px',
+                            fontWeight: '700',
+                            flexShrink: 0
+                          }}>
+                            {colors.icon}
+                          </div>
+                          
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: '600', color: colors.text, fontSize: '13px' }}>
+                              {test.name}
+                            </div>
+                            <div style={{ fontSize: '12px', color: colors.text, marginTop: '2px' }}>
+                              {test.message}
+                            </div>
+                            {test.details && (
+                              <div style={{ fontSize: '11px', color: colors.text, marginTop: '4px', opacity: 0.8 }}>
+                                {test.details}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+
+              {!result && (
+                <div style={{ textAlign: 'center', color: '#9ca3af', padding: '20px', fontSize: '13px' }}>
+                  Click "Test Bridge" to run diagnostics
+                </div>
+              )}
+            </div>
+          )
+        })}
+
+        {bridges.length === 0 && (
+          <div style={{ textAlign: 'center', color: '#9ca3af', padding: '40px' }}>
+            No bridges configured. Add a bridge in the Bridge Manager tab.
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+const QlabSyncPanel = () => {
+  const [qlabConnected, setQlabConnected] = React.useState(false)
+  const [currentCue, setCurrentCue] = React.useState(null)
+  const [workspace, setWorkspace] = React.useState(null)
+
+  React.useEffect(() => {
+    const handleQlabStatus = (data) => {
+      console.log('Qlab status update:', data)
+      
+      if (data.address === '/reply/cue/selected/uniqueID') {
+        setCurrentCue(data.data)
+        setQlabConnected(true)
+      } else if (data.address === '/reply/workspace/selected') {
+        setWorkspace(data.data)
+      }
+    }
+    
+    window.electronAPI.onQlabStatus(handleQlabStatus)
+  }, [])
+
+  const sendGo = () => {
+    window.electronAPI.sendOSCToQlab('/go', [])
+  }
+
+  const sendStop = () => {
+    window.electronAPI.sendOSCToQlab('/stop', [])
+  }
+
+  return (
+    <div style={{
+      position: 'fixed',
+      bottom: '20px',
+      right: '20px',
+      backgroundColor: 'white',
+      padding: '16px',
+      borderRadius: '8px',
+      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+      border: '2px solid ' + (qlabConnected ? '#10b981' : '#ef4444'),
+      minWidth: '250px'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+        <div style={{
+          width: '10px',
+          height: '10px',
+          borderRadius: '50%',
+          backgroundColor: qlabConnected ? '#10b981' : '#ef4444',
+          animation: qlabConnected ? 'pulse 2s infinite' : 'none'
+        }} />
+        <h3 style={{ margin: 0, fontSize: '14px', fontWeight: '600' }}>
+          Qlab Sync
+        </h3>
+      </div>
+      
+      {qlabConnected ? (
+        <>
+          <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '8px' }}>
+            <div>Workspace: {workspace || 'Unknown'}</div>
+            <div>Current Cue: {currentCue || 'None'}</div>
+          </div>
+          
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={sendGo}
+              style={{
+                flex: 1,
+                backgroundColor: '#10b981',
+                color: 'white',
+                border: 'none',
+                padding: '8px',
+                borderRadius: '4px',
+                fontSize: '12px',
+                fontWeight: '500',
+                cursor: 'pointer'
+              }}
+            >
+              GO
+            </button>
+            <button
+              onClick={sendStop}
+              style={{
+                flex: 1,
+                backgroundColor: '#ef4444',
+                color: 'white',
+                border: 'none',
+                padding: '8px',
+                borderRadius: '4px',
+                fontSize: '12px',
+                fontWeight: '500',
+                cursor: 'pointer'
+              }}
+            >
+              STOP
+            </button>
+          </div>
+        </>
+      ) : (
+        <div style={{ fontSize: '12px', color: '#9ca3af' }}>
+          Waiting for Qlab connection...
+        </div>
+      )}
+    </div>
+  )
+}
+
 function App() {
 
 const style = document.createElement('style')
@@ -1876,6 +2664,7 @@ document.head.appendChild(style)
   const [bridges, setBridges] = React.useState([])
   const [manualIP, setManualIP] = React.useState('')
   const [manualName, setManualName] = React.useState('')
+  const [manualInstallation, setManualInstallation] = React.useState('')
   const [selectedBridge, setSelectedBridge] = React.useState(null)
   const [lights, setLights] = React.useState({})
   const [groups, setGroups] = React.useState({})
@@ -1891,6 +2680,7 @@ document.head.appendChild(style)
   const [showQlabScript, setShowQlabScript] = React.useState({})
   const [currentPage, setCurrentPage] = React.useState('bridges') // 'bridges', 'lights', 'generator'
   const [allLoadedGroups, setAllLoadedGroups] = React.useState({})
+        console.log('allLoadedGroups in App:', allLoadedGroups)
   const [bridgeConnections, setBridgeConnections] = React.useState({})
   const [groupV2Ids, setGroupV2Ids] = React.useState({})
   const [installations, setInstallations] = React.useState([])
@@ -1903,6 +2693,11 @@ document.head.appendChild(style)
   const [showFleetPage, setShowFleetPage] = React.useState(false)
   const [unregisteredBulbs, setUnregisteredBulbs] = React.useState([])
   const [showRegistrationModal, setShowRegistrationModal] = React.useState(false)
+  // Diagnostic states
+  const [diagnosticsBridge, setDiagnosticsBridge] = React.useState(null)
+  const [diagnosticResults, setDiagnosticResults] = React.useState({})
+  const [runningDiagnostics, setRunningDiagnostics] = React.useState(false)
+  
 
   const loadAllBridgeGroups = React.useCallback(async () => {
   const allGroups = {}
@@ -1926,6 +2721,77 @@ document.head.appendChild(style)
   setAllLoadedGroups(allGroups)
   setAllLoadedLights(allLights) // Save them to our new state
 }, [bridges])
+
+// Detect bulb manufacturing region from model ID
+const detectBulbRegion = (modelId) => {
+  if (!modelId) return 'Unknown'
+  
+  const modelUpper = modelId.toUpperCase()
+  
+  if (modelUpper.includes('A19') || 
+      modelUpper.includes('BR30') || 
+      modelUpper.includes('PAR38') ||
+      modelUpper.includes('/US')) {
+    return 'US'
+  }
+  
+  if (modelUpper.includes('E27') || 
+      modelUpper.includes('GU10') || 
+      modelUpper.includes('E14') ||
+      modelUpper.includes('/EU')) {
+    return 'EU'
+  }
+  
+  if (modelUpper.includes('B22')) {
+    return 'UK'
+  }
+  
+  return 'Unknown'
+}
+
+// Load config from Resilio Sync folder on startup
+React.useEffect(() => {
+  const loadConfig = async () => {
+    const result = await window.electronAPI.readConfigFile(CONFIG_FILE_PATH)
+    
+    if (result.success) {
+      console.log('✓ Loaded config from Resilio Sync')
+      
+      // Load all data from config file
+      if (result.content.bridges) {
+        setBridges(result.content.bridges)
+        // Also save to localStorage as backup
+        localStorage.setItem('hue_bridges', JSON.stringify(result.content.bridges))
+      }
+      
+      if (result.content.installations) {
+        setInstallations(result.content.installations)
+        localStorage.setItem('installations', JSON.stringify(result.content.installations))
+      }
+      
+      if (result.content.fleetDatabase) {
+        localStorage.setItem('fleet_database', JSON.stringify(result.content.fleetDatabase))
+      }
+      
+      if (result.content.groupV2Ids) {
+        localStorage.setItem('group_v2_ids', JSON.stringify(result.content.groupV2Ids))
+      }
+    } else {
+      console.log('Config file not found, using localStorage:', result.error)
+      // Fall back to localStorage (loads existing bridges from localStorage in useState)
+    }
+  }
+  
+  loadConfig()
+}, [])
+
+// Auto-save to Resilio config whenever ANY data changes
+React.useEffect(() => {
+  // Only save if we have actual data (not initial empty state)
+  if (bridges.length > 0 || installations.length > 0 || Object.keys(fleetDatabase).length > 0) {
+    saveConfigToFile()
+  }
+}, [bridges, installations, fleetDatabase])
 
 React.useEffect(() => {
   const connectedBridges = bridges.filter(b => b.connected && b.username);
@@ -1997,6 +2863,76 @@ React.useEffect(() => {
   }
 }, [])
 
+React.useEffect(() => {
+  if (bridges.length === 0) return
+  
+  const loadAllBridges = async () => {
+    console.log('Loading data for bridges:', bridges.map(b => b.name))
+    
+    // Helper to add timeout to any promise
+    const withTimeout = (promise, ms = 5000) => {
+      const timeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timed out')), ms)
+      )
+      return Promise.race([promise, timeout])
+    }
+    
+    for (const bridge of bridges) {
+      if (bridge.username) {
+        // Load lights
+        try {
+          const lightsData = await withTimeout(
+            hueService.getLights(bridge.ip, bridge.username)
+          )
+          setAllLoadedLights(prev => ({ ...prev, [bridge.ip]: lightsData }))
+          console.log(`✓ Loaded ${Object.keys(lightsData).length} lights for ${bridge.name}`)
+        } catch (lightError) {
+          console.log(`⚠ ${bridge.name} lights failed: ${lightError.message}`)
+        }
+        
+        // Load groups
+        try {
+          const groupsData = await withTimeout(
+            hueService.getGroups(bridge.ip, bridge.username)
+          )
+          setAllLoadedGroups(prev => ({ ...prev, [bridge.ip]: groupsData }))
+          console.log(`✓ Loaded ${Object.keys(groupsData).length} groups for ${bridge.name}`)
+        } catch (groupError) {
+          console.log(`⚠ ${bridge.name} groups failed: ${groupError.message}`)
+        }
+      }
+    }
+  }
+  
+  loadAllBridges()
+}, [bridges.length])
+
+// Update remote monitor every 5 seconds
+React.useEffect(() => {
+  updateRemoteMonitor()
+  const interval = setInterval(updateRemoteMonitor, 5000)
+  return () => clearInterval(interval)
+}, [bridges, allLoadedGroups, bridgeConnections])
+
+// Auto-refresh light states every 3 seconds for remote monitoring
+React.useEffect(() => {
+  const refreshLights = async () => {
+    for (const bridge of bridges) {
+      if (bridge.username && bridgeConnections[bridge.id]) {
+        try {
+          const lightsData = await hueService.getLights(bridge.ip, bridge.username)
+          setAllLoadedLights(prev => ({ ...prev, [bridge.ip]: lightsData }))
+        } catch (error) {
+          // Bridge offline, skip
+        }
+      }
+    }
+  }
+
+  const interval = setInterval(refreshLights, 3000) // Every 3 seconds
+  return () => clearInterval(interval)
+}, [bridges, bridgeConnections])
+
 const handleBackToBridges = () => {
   console.log("Back button clicked - Resetting state");
   setSelectedBridge(null);
@@ -2005,11 +2941,31 @@ const handleBackToBridges = () => {
   setCurrentPage('bridges');
 };
 
+const saveConfigToFile = async () => {
+  const config = {
+    bridges,
+    installations,
+    fleetDatabase: JSON.parse(localStorage.getItem('fleet_database') || '{}'),
+    groupV2Ids: JSON.parse(localStorage.getItem('group_v2_ids') || '{}'),
+    lastUpdated: new Date().toISOString()
+  }
+  
+  const result = await window.electronAPI.writeConfigFile(CONFIG_FILE_PATH, config)
+  
+  if (result.success) {
+    console.log('✓ Config saved to Resilio Sync')
+  } else {
+    console.log('✗ Could not save config:', result.error)
+  }
+}
+
 // Save fleet database to localStorage whenever it changes
 const saveFleetDatabase = (newFleetData) => {
   setFleetDatabase(newFleetData)
   localStorage.setItem('fleet_database', JSON.stringify(newFleetData))
   console.log('Fleet database saved:', newFleetData)
+    // Also save to Resilio Sync config file
+  saveConfigToFile()
 }
 
 // Register a new bulb in the fleet
@@ -2028,6 +2984,110 @@ const registerBulb = (uniqueId, fleetData) => {
     }
   }
   saveFleetDatabase(newFleetDb)
+}
+
+const runDiagnostics = async (bridge) => {
+  setRunningDiagnostics(true)
+  const results = {
+    bridgeIp: bridge.ip,
+    bridgeName: bridge.name,
+    tests: []
+  }
+
+  // Test 1: Basic Connectivity
+  const connectStart = performance.now()
+  try {
+    const response = await fetch(`http://${bridge.ip}/api/${bridge.username}/config`)
+    const connectEnd = performance.now()
+    const responseTime = Math.round(connectEnd - connectStart)
+    
+    if (response.ok) {
+      const config = await response.json()
+      results.tests.push({
+        name: 'Bridge Reachability',
+        status: 'pass',
+        message: `Connected successfully (${responseTime}ms)`,
+        details: `Bridge Name: ${config.name}, Firmware: ${config.swversion}`
+      })
+      results.responseTime = responseTime
+      results.config = config
+    } else {
+      results.tests.push({
+        name: 'Bridge Reachability',
+        status: 'fail',
+        message: `HTTP ${response.status} - Bridge responded but authentication may have failed`
+      })
+    }
+  } catch (error) {
+    results.tests.push({
+      name: 'Bridge Reachability',
+      status: 'fail',
+      message: `Cannot reach bridge: ${error.message}`,
+      details: 'Check if bridge is powered on and connected to network'
+    })
+  }
+
+  // Test 2: API Performance
+  try {
+    const perfStart = performance.now()
+    await hueService.getLights(bridge.ip, bridge.username)
+    const perfEnd = performance.now()
+    const apiTime = Math.round(perfEnd - perfStart)
+    
+    if (apiTime < 500) {
+      results.tests.push({
+        name: 'API Response Speed',
+        status: 'pass',
+        message: `Fast response (${apiTime}ms)`,
+        details: 'API calls are performing well'
+      })
+    } else if (apiTime < 2000) {
+      results.tests.push({
+        name: 'API Response Speed',
+        status: 'warning',
+        message: `Slow response (${apiTime}ms)`,
+        details: 'Bridge may be under load or network congestion'
+      })
+    } else {
+      results.tests.push({
+        name: 'API Response Speed',
+        status: 'fail',
+        message: `Very slow response (${apiTime}ms)`,
+        details: 'Check network connection or bridge performance'
+      })
+    }
+  } catch (error) {
+    results.tests.push({
+      name: 'API Response Speed',
+      status: 'fail',
+      message: 'Could not test API speed',
+      details: error.message
+    })
+  }
+
+  // Test 3: Light Discovery
+  try {
+    const lights = await hueService.getLights(bridge.ip, bridge.username)
+    const lightCount = Object.keys(lights).length
+    const reachableLights = Object.values(lights).filter(l => l.state?.reachable).length
+    
+    results.tests.push({
+      name: 'Light Discovery',
+      status: lightCount > 0 ? 'pass' : 'warning',
+      message: `Found ${lightCount} lights, ${reachableLights} reachable`,
+      details: lightCount === reachableLights ? 'All lights online' : `${lightCount - reachableLights} lights offline`
+    })
+  } catch (error) {
+    results.tests.push({
+      name: 'Light Discovery',
+      status: 'fail',
+      message: 'Could not discover lights',
+      details: error.message
+    })
+  }
+
+  setDiagnosticResults(prev => ({ ...prev, [bridge.ip]: results }))
+  setRunningDiagnostics(false)
 }
 
 // Update bulb metadata
@@ -2088,6 +3148,8 @@ const recognizeFleetBulbs = async (bridgeIp, username, lightsData) => {
       updateBulbMetadata(uniqueId, {
         currentBridge: bridgeIp,
         currentLightId: lightId,
+        region: detectBulbRegion(light.modelid),
+        modelId: light.modelid,
         lastSeen: new Date().toISOString(),
         event: `Detected on bridge ${bridgeIp}`
       })
@@ -2155,6 +3217,7 @@ const handleAddManualBridge = () => {
         id: 'manual-' + Date.now(),
         ip: manualIP,
         name: manualName || `Bridge (${manualIP})`,
+        installation: manualInstallation,
         connected: false,
         username: null
       }
@@ -2162,6 +3225,7 @@ const handleAddManualBridge = () => {
       setBridges([...bridges, newBridge])
       setManualIP('')
       setManualName('')
+      setManualInstallation('')
     }
   }
 
@@ -2176,6 +3240,30 @@ const handleAddManualBridge = () => {
       alert(error.message)
     }
   }
+
+// Update remote monitor data
+const updateRemoteMonitor = async () => {
+  const installationMap = {}
+  
+  bridges.forEach(bridge => {
+    const installation = bridge.installation || 'Unassigned'
+    if (!installationMap[installation]) {
+      installationMap[installation] = []
+    }
+    installationMap[installation].push({
+      name: bridge.name,
+      ip: bridge.ip,
+      username: bridge.username,
+      online: bridgeConnections[bridge.id] || false
+    })
+  })
+  
+  try {
+    await window.electronAPI.updateMonitorData({ installations: installationMap })
+  } catch (error) {
+    console.log('Could not update remote monitor:', error)
+  }
+}
 
  const handleSelectBridge = async (bridge) => {
   setLights({})
@@ -2316,6 +3404,20 @@ const loadBridgeData = async (bridge) => {
     setAllLoadedGroups(prev => ({ ...prev, [bridge.ip]: groupsData }))
     console.log('State updated!')
     
+    Object.entries(groupsData).forEach(([groupId, group]) => {
+          if (group.lights) {
+            group.lights.forEach(lightV1Id => {
+              Object.entries(fleetDatabase).forEach(([uniqueid, bulbData]) => {
+                if (bulbData.currentLightId === lightV1Id) {
+                  updateBulbMetadata(uniqueid, {
+                    currentGroup: group.name
+                  })
+                }
+              })
+            })
+          }
+        })
+
     // Fetch v2 IDs
     try {
       const v2Mapping = await hueService.getGroupedLightIds(bridge.ip, bridge.username)
@@ -2333,7 +3435,6 @@ const loadBridgeData = async (bridge) => {
   
   } catch (error) {
     console.error('Load error:', error)
-    alert('Failed to load bridge data: ' + error.message)
   }
 }
 
@@ -2656,6 +3757,77 @@ const allBridgeDataWithLights = React.useMemo(() => {
     };
   });
 }, [bridges, allLoadedGroups]);
+
+console.log('Current page:', currentPage)
+
+const DiagnosticsModal = ({ bridge, onClose }) => {
+  const result = diagnosticResults[bridge?.ip]
+  
+  React.useEffect(() => {
+    // Only run if we don't have results yet
+    if (bridge && !diagnosticResults[bridge.ip]) {
+      runDiagnostics(bridge)
+    }
+  }, []) // Empty deps - only run once when modal mounts
+  
+  if (!bridge) return null
+  
+  const statusColors = {
+    pass: { bg: '#d1fae5', border: '#48bb78', text: '#065f46', icon: '✓' },
+    warning: { bg: '#fef3c7', border: '#fbbf24', text: '#78350f', icon: '⚠' },
+    fail: { bg: '#fee2e2', border: '#ef4444', text: '#991b1b', icon: '✗' }
+  }
+  
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.5)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 1000
+    }} onClick={onClose}>
+      <div style={{
+        backgroundColor: 'white',
+        borderRadius: '8px',
+        padding: '24px',
+        maxWidth: '600px',
+        width: '90%',
+        maxHeight: '80vh',
+        overflow: 'auto'
+      }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h2 style={{ margin: 0 }}>Diagnostics: {bridge.name}</h2>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '24px', cursor: 'pointer' }}>×</button>
+        </div>
+        
+        {!result && <div style={{ textAlign: 'center', padding: '40px' }}>⏳ Running diagnostics...</div>}
+        
+        {result && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {result.tests.map((test, idx) => {
+              const colors = statusColors[test.status]
+              return (
+                <div key={idx} style={{ backgroundColor: colors.bg, border: `1px solid ${colors.border}`, borderRadius: '6px', padding: '12px' }}>
+                  <div style={{ fontWeight: '600', color: colors.text }}>{colors.icon} {test.name}</div>
+                  <div style={{ fontSize: '12px', color: colors.text, marginTop: '4px' }}>{test.message}</div>
+                  {test.details && <div style={{ fontSize: '11px', color: colors.text, marginTop: '4px', opacity: 0.8 }}>{test.details}</div>}
+                </div>
+              )
+            })}
+            <button onClick={() => { setDiagnosticResults(prev => { const newResults = {...prev}; delete newResults[bridge.ip]; return newResults; }); runDiagnostics(bridge); }} style={{ marginTop: '12px', padding: '10px', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+              🔄 Run Again
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 return (
   <div style={{ padding: '40px', fontFamily: 'sans-serif' }}>
     
@@ -2667,6 +3839,13 @@ return (
         onRegister={handleRegisterBulb}
         onSkip={handleSkipBulb}
         onClose={handleCloseRegistration}
+      />
+    )}
+
+    {diagnosticsBridge && (
+      <DiagnosticsModal
+        bridge={diagnosticsBridge}
+        onClose={() => setDiagnosticsBridge(null)}
       />
     )}
 
@@ -2851,41 +4030,90 @@ return (
         Qlab Generator
       </button>
 
+      <button 
+        onClick={() => setCurrentPage('monitor')}
+        style={{
+          backgroundColor: currentPage === 'monitor' ? '#F59E0B' : 'transparent',
+          color: currentPage === 'monitor' ? 'white' : '#4a5568',
+          border: 'none',
+          padding: '10px 24px',
+          borderRadius: '6px 6px 0 0',
+          fontSize: '14px',
+          fontWeight: '500',
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+          borderBottom: currentPage === 'monitor' ? '2px solid #F59E0B' : 'none',
+          marginBottom: '-2px'
+        }}
+        onMouseEnter={(e) => {
+          if (currentPage !== 'monitor') {
+            e.target.style.backgroundColor = '#f7fafc'
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (currentPage !== 'monitor') {
+            e.target.style.backgroundColor = 'transparent'
+          }
+        }}
+      >
+        Live Monitor
+      </button>
+
     </div>
 
-    {/* Tab Content */}
-    {currentPage === 'generator' && (
-      <QlabGeneratorPage 
-        bridges={bridges}
-        allLoadedGroups={allLoadedGroups}
-        loadAllBridgeGroups={loadAllBridgeGroups}
-        groupV2Ids={groupV2Ids}
-        setCurrentPage={setCurrentPage}
-        setSelectedBridge={setSelectedBridge}
-        setHasRunRecognition={setHasRunRecognition}
-        setHasShownRegistrationModal={setHasShownRegistrationModal}
-        allBridgeData={allBridgeDataWithLights} 
-      />
-    )}
+{/* Tab Content */}
+{currentPage === 'generator' && (
+  <QlabGeneratorPage 
+    bridges={bridges}
+    allLoadedGroups={allLoadedGroups}
+    loadAllBridgeGroups={loadAllBridgeGroups}
+    groupV2Ids={groupV2Ids}
+    setCurrentPage={setCurrentPage}
+    setSelectedBridge={setSelectedBridge}
+    setHasRunRecognition={setHasRunRecognition}
+    setHasShownRegistrationModal={setHasShownRegistrationModal}
+    allBridgeData={allBridgeDataWithLights}
+    fleetDatabase={fleetDatabase}
+  />
+)}
 
-    {currentPage === 'fleet' && (
-      <FleetManagementPage
-        fleetDatabase={fleetDatabase}
-        allBridgeData={bridges.map(b => ({ ...b, lights: allLoadedLights[b.ip] || {} }))}
-        updateBulbMetadata={updateBulbMetadata}
-        onUpdateBulb={handleUpdateFleetBulb}
-        onDeleteBulb={handleDeleteFleetBulb}
-        onManageBulb={(bulb) => {
-          console.log("Managing bulb:", bulb);
-          setEditingLight(bulb);
-        }}
-        onImportFleetData={handleImportFleetData} 
-        onBack={() => setCurrentPage('bridges')}
-        installations={installations}
-        onAddInstallation={handleAddInstallation}
-        onRemoveInstallation={handleRemoveInstallation}
-      />
-    )}
+{currentPage === 'fleet' && (
+  <FleetManagementPage
+    fleetDatabase={fleetDatabase}
+    allBridgeData={bridges.map(b => ({ 
+      ...b, 
+      lights: allLoadedLights[b.ip] || {} 
+    }))}
+    allLoadedGroups={allLoadedGroups}
+    updateBulbMetadata={updateBulbMetadata}
+    onUpdateBulb={handleUpdateFleetBulb}
+    onDeleteBulb={handleDeleteFleetBulb}
+    onManageBulb={(bulb) => {
+      console.log("Managing bulb:", bulb)
+      setEditingLight(bulb)
+    }}
+    onImportFleetData={handleImportFleetData}
+    onBack={() => setCurrentPage('bridges')}
+    installations={installations}
+    onAddInstallation={handleAddInstallation}
+    onRemoveInstallation={handleRemoveInstallation}
+  />
+)}
+
+{currentPage === 'monitor' && (
+  <LiveMonitorPage
+    bridges={bridges}
+    allLoadedGroups={allLoadedGroups}
+    allLoadedLights={allLoadedLights}
+  />
+)}
+
+{currentPage === 'diagnostics' && (
+  <NetworkDiagnosticsPage
+    bridges={bridges}
+    bridgeConnections={bridgeConnections}
+  />
+)}
 
 {currentPage === 'bridges' && (
       <div>
@@ -2944,6 +4172,16 @@ return (
               onChange={(e) => setManualIP(e.target.value)}
               style={{ padding: '8px', width: '200px', marginRight: '10px' }}
             />
+             <select
+              value={manualInstallation}
+              onChange={(e) => setManualInstallation(e.target.value)}
+              style={{ padding: '8px', width: '200px', marginRight: '10px' }}
+            >
+              <option value="">Select Installation...</option>
+              {installations.map(inst => (
+                <option key={inst} value={inst}>{inst}</option>
+              ))}
+            </select>
             <button onClick={handleAddManualBridge}>Add Bridge</button>
           </div>
 
@@ -2959,38 +4197,120 @@ return (
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                  <div>
-  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-    <h3 style={{ margin: 0 }}>{bridge.name}</h3>
-    {bridgeConnections[bridge.id] !== undefined && (
-      <span style={{
-        display: 'inline-block',
-        width: '12px',
-        height: '12px',
-        borderRadius: '50%',
-        backgroundColor: bridgeConnections[bridge.id] ? '#4CAF50' : '#ff4444',
-        border: '2px solid ' + (bridgeConnections[bridge.id] ? '#45a049' : '#cc0000'),
-        animation: bridgeConnections[bridge.id] ? 'pulse 2s infinite' : 'none'
-      }} title={bridgeConnections[bridge.id] ? 'Connected' : 'Disconnected'} />
-    )}
-  </div>
-  <p style={{ margin: '5px 0' }}>IP: {bridge.ip}</p>
-  {bridge.username && <p style={{ fontSize: '12px', color: '#666', margin: '5px 0' }}>API Key: {bridge.username.slice(0, 100)}</p>}
-  <p style={{ fontSize: '14px', color: bridgeConnections[bridge.id] ? '#4CAF50' : '#ff4444', fontWeight: '500', margin: '5px 0' }}>
-    {bridgeConnections[bridge.id] ? '✓ Online' : '✗ Offline'}
-  </p>
-</div>
-                  <div>
-                    <button onClick={() => handleRemoveBridge(bridge.id)} style={{ background: '#ff4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer', marginRight: '10px' }}>
-                      Remove
-                    </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <h3 style={{ margin: 0 }}>{bridge.name}</h3>
+                  {bridgeConnections[bridge.id] !== undefined && (
+                    <span style={{
+                      display: 'inline-block',
+                      width: '12px',
+                      height: '12px',
+                      borderRadius: '50%',
+                      backgroundColor: bridgeConnections[bridge.id] ? '#4CAF50' : '#ff4444',
+                      border: '2px solid ' + (bridgeConnections[bridge.id] ? '#45a049' : '#cc0000'),
+                      animation: bridgeConnections[bridge.id] ? 'pulse 2s infinite' : 'none'
+                    }} title={bridgeConnections[bridge.id] ? 'Connected' : 'Disconnected'} />
+                  )}
+                </div>
+                <p style={{ margin: '5px 0' }}>IP: {bridge.ip}</p>
+                {/* Installation Selector */}
+                  <div style={{ margin: '8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '12px', color: '#666', fontWeight: '500' }}>Installation:</span>
+                    <select
+                      value={bridge.installation || ''}
+                      onChange={(e) => {
+                        const updatedBridges = bridges.map(b => 
+                          b.id === bridge.id ? { ...b, installation: e.target.value } : b
+                        )
+                        setBridges(updatedBridges)
+                        localStorage.setItem('hue_bridges', JSON.stringify(updatedBridges))
+                      }}
+                      style={{ 
+                        padding: '4px 8px', 
+                        fontSize: '12px',
+                        border: '1px solid #cbd5e0',
+                        borderRadius: '4px'
+                      }}
+                    >
+                      <option value="">-- None --</option>
+                      {installations.map(inst => (
+                        <option key={inst} value={inst}>{inst}</option>
+                      ))}
+                    </select>
+                  </div>
+                {bridge.username && <p style={{ fontSize: '12px', color: '#666', margin: '5px 0' }}>API Key: {bridge.username.slice(0, 100)}</p>}
+                <p style={{ fontSize: '14px', color: bridgeConnections[bridge.id] ? '#4CAF50' : '#ff4444', fontWeight: '500', margin: '5px 0' }}>
+                  {bridgeConnections[bridge.id] ? '✓ Online' : '✗ Offline'}
+                </p>
+              </div>
+                 <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+
+                  {/* Manage & Remove - standard buttons */}
+                  <div style={{ display: 'flex', gap: '8px' }}>
                     {bridge.connected && (
-                      <button onClick={() => handleSelectBridge(bridge)} style={{ background: '#4CAF50', color: 'white', border: 'none', padding: '5px 15px', borderRadius: '4px', cursor: 'pointer' }}>
+                      <button 
+                        onClick={() => handleSelectBridge(bridge)} 
+                        style={{ 
+                          backgroundColor: '#4CAF50',
+                          color: 'white',
+                          border: 'none',
+                          padding: '5px 15px',
+                          borderRadius: '4px',
+                          fontSize: '13px',
+                          cursor: 'pointer'
+                        }}
+                      >
                         Manage Lights →
                       </button>
                     )}
+                    
+                    <button 
+                      onClick={() => handleRemoveBridge(bridge.id)} 
+                      style={{ 
+                        background: '#ff4444',
+                        color: 'white',
+                        border: 'none',
+                        padding: '5px 10px',
+                        borderRadius: '4px',
+                        fontSize: '13px',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Remove
+                    </button>
                   </div>
                 </div>
+                </div>
                 
+                {/* Bottom: Run Diagnostics */}
+                <div style={{ textAlign: 'right', marginTop: '10px' }}>
+                  <button 
+                    onClick={() => setDiagnosticsBridge(bridge)}
+                    style={{ 
+                      backgroundColor: 'transparent',
+                      color: '#6b7280',
+                      border: 'none',
+                      padding: '2px 4px',
+                      borderRadius: '4px',
+                      fontSize: '10px',
+                      fontWeight: '600',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                      letterSpacing: '0.5px',
+                      textTransform: 'uppercase'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.target.style.color = '#3b82f6'
+                      e.target.style.textDecoration = 'underline'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.target.style.color = '#6b7280'
+                      e.target.style.textDecoration = 'none'
+                    }}
+                  >
+                    Run Diagnostics
+                  </button>
+                </div>
+
                 {!bridge.connected && (
                   <div style={{ marginTop: '10px', padding: '10px', backgroundColor: '#fff3cd', borderRadius: '4px' }}>
                     <p style={{ margin: '0 0 10px 0', fontSize: '14px' }}>
@@ -3005,34 +4325,34 @@ return (
         </>
       )}
 
-      {selectedBridge && (
-        <div>
-          <div>
-<div>
-  {/* Title + Status + Buttons Row */}
-  <div style={{ 
-    display: 'flex', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: '20px' 
-  }}>
-    {/* Left: Title + Status */}
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-      <h2 style={{ margin: 0 }}>{selectedBridge.name} - Light Management</h2>
-      {bridgeConnections[selectedBridge.id] !== undefined && (
-        <span style={{
-          padding: '4px 12px',
-          borderRadius: '12px',
-          fontSize: '12px',
-          fontWeight: '600',
-          backgroundColor: bridgeConnections[selectedBridge.id] ? '#e8f5e9' : '#ffebee',
-          color: bridgeConnections[selectedBridge.id] ? '#2e7d32' : '#c62828',
-          border: '1px solid ' + (bridgeConnections[selectedBridge.id] ? '#4CAF50' : '#ff4444')
+{selectedBridge && (
+  <div>
+    <div>
+      <div>
+        {/* Title + Status + Buttons Row */}
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          marginBottom: '20px' 
         }}>
-          {bridgeConnections[selectedBridge.id] ? '● ONLINE' : '● OFFLINE'}
-        </span>
-      )}
-    </div>
+          {/* Left: Title + Status */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <h2 style={{ margin: 0 }}>{selectedBridge.name} - Light Management</h2>
+            {bridgeConnections[selectedBridge.id] !== undefined && (
+              <span style={{
+                padding: '4px 12px',
+                borderRadius: '12px',
+                fontSize: '12px',
+                fontWeight: '600',
+                backgroundColor: bridgeConnections[selectedBridge.id] ? '#e8f5e9' : '#ffebee',
+                color: bridgeConnections[selectedBridge.id] ? '#2e7d32' : '#c62828',
+                border: '1px solid ' + (bridgeConnections[selectedBridge.id] ? '#4CAF50' : '#ff4444')
+              }}>
+                {bridgeConnections[selectedBridge.id] ? '● ONLINE' : '● OFFLINE'}
+              </span>
+            )}
+          </div>
     
     {/* Right: Action Buttons */}
     <div style={{ display: 'flex', gap: '12px' }}>
@@ -3454,7 +4774,7 @@ return (
   )}
 </div>
 
-          <p style={{ color: '#666', fontSize: '14px' }}>Click light name to rename | Click "Transfer" to move to another bridge</p>
+          <p style={{ color: '#666', fontSize: '14px' }}>Click light name to rename</p>
 
           <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '20px', marginTop: '20px' }}>
             <div style={{ backgroundColor: '#f9f9f9', padding: '15px', borderRadius: '8px' }}>
@@ -3865,9 +5185,17 @@ return (
           {generateQlabScript(groupId)}
         </pre>
       )}
+      return (
+        <div style={{ padding: '40px', fontFamily: 'sans-serif' }}>
+          {/* ... all your existing content ... */}
+          
+          <QlabSyncPanel />  {/* ← ADD THIS */}
+        </div>
+      )
     </div>
   )}
-</div>                </div>
+  </div>                
+  </div>
               ))}
             </div>
           </div>
