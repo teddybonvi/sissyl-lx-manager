@@ -2,16 +2,31 @@
 
 All notable changes to Sister Sylvester LX Manager will be documented in this file.
 
+## [1.1.4] - 2026-04-08
+
+### Added
+- README.md with comprehensive documentation
+- CHANGELOG.md for version tracking
+- DMG configuration for better installation layout
+
+### Changed
+- Improved documentation and project organization
+- Cleaned up build configuration
+
+---
+
 ## [1.1.3] - 2026-04-08
 
 ### Added
-- **Auto-installer script** (`install-sissyl.command`) for artist-friendly installation
-- No Terminal commands required - just double-click to install
-- Automatic removal of macOS quarantine flags
+- **Installation assignment for bridges**
+  - Dropdown selector on each bridge card
+  - Assign bridges to installations (CST, DB, etc.)
+- **Installation-based remote monitoring**
+  - Remote monitor groups bridges by installation
+  - "Select an installation" dropdown instead of individual bridges
 
 ### Changed
-- Simplified installation process for non-technical users
-- DMG now includes one-click installer
+- Remote monitor now shows bridge headers separating groups from different bridges
 
 ---
 

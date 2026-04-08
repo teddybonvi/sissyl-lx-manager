@@ -44,18 +44,18 @@ A professional lighting control system for Philips Hue bridges, designed for Sis
 
 ## Installation
 
-### Easy Install (Recommended)
-1. Download the latest .dmg from Releases
-2. Open the DMG file
-3. Double-click install-sissyl.command
-4. Launch Sister Sylvester LX Manager from Applications
+### Via Resilio Sync (Recommended)
+1. Sync the latest DMG from the team folder
+2. Open the DMG
+3. Drag "Sister Sylvester LX Manager" to Applications
+4. Launch from Applications
 
-### Manual Install
-1. Download the latest .dmg from Releases
-2. Drag Sister Sylvester LX Manager to Applications folder
-3. Right-click the app in Applications and select Open
-4. Click Open again in the security dialog
-5. App will launch normally from now on
+### Via GitHub Releases (Public Download)
+1. Download the latest `.dmg` from [Releases](https://github.com/teddybonvi/sissyl-lx-manager/releases)
+2. Open the DMG
+3. Drag "Sister Sylvester LX Manager" to Applications
+4. Right-click the app → Open → Open (first launch only)
+5. Launch normally from then on
 
 ## Quick Start
 
