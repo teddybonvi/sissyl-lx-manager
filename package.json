@@ -1,6 +1,6 @@
 {
   "name": "sissyl-lx-manager",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "type": "module",
   "description": "Sister Sylvester LX Manager - Philips Hue Bridge Management",
   "main": "electron/main.js",

@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import hueService from './services/hueApi.js'
+import logo from "../../assets/icon.png"
 
 const CONFIG_FILE_PATH = '/Volumes/EDIT LOCAL/SISYL_Local/_LX Management/config/sissyl-lx-config.json'
 
@@ -3849,91 +3850,113 @@ return (
       />
     )}
 
-    {/* Header Row: Title + Action Buttons - ALWAYS VISIBLE */}
-    <div style={{ 
-      marginBottom: '24px',
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center'
+{/* Header Row: Title + Action Buttons - ALWAYS VISIBLE */}
+<div style={{ 
+  marginBottom: '24px',
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center'
+}}>
+  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+    {/* Circular Logo */}
+    <div style={{
+      width: '60px',
+      height: '60px',
+      borderRadius: '50%',
+      overflow: 'hidden',
+      border: '2px solid #e2e8f0',
+      flexShrink: 0
     }}>
-      <h1 style={{ 
-        margin: 0,
-        fontSize: '28px',
-        fontWeight: '700',
-        color: '#1a202c',
-        letterSpacing: '-0.5px'
-      }}>
-        Sister Sylvester LX Manager
-      </h1>
-
-      {/* Action Buttons - Right Aligned */}
-      <div style={{ display: 'flex', gap: '12px' }}>
-        {/* Import Bridge Config */}
-        <label style={{
-          backgroundColor: '#ffffff',
-          color: '#1976d2',
-          border: '1px solid #1976d2',
-          padding: '4px 20px',
-          borderRadius: '6px',
-          fontSize: '12px',
-          fontWeight: '500',
-          cursor: 'pointer',
-          transition: 'all 0.2s',
-          textAlign: 'center',
-          display: 'inline-block'
-        }}
-        onMouseEnter={(e) => e.target.style.backgroundColor = '#1976d21a'}
-        onMouseLeave={(e) => e.target.style.backgroundColor = '#ffffff'}>
-          Import Bridge Config
-          <input 
-            type="file" 
-            accept=".json"
-            onChange={handleImportBridgeConfig}
-            style={{ display: 'none' }}
-          />
-        </label>
-        
-        {/* Export Bridge Config */}
-        <button 
-          onClick={handleExportBridgeConfig}
-          style={{
-            backgroundColor: '#1976d292',
-            color: '#ffffff',
-            border: 'none',
-            padding: '4px 20px',
-            borderRadius: '6px',
-            fontSize: '12px',
-            fontWeight: '500',
-            cursor: 'pointer',
-            transition: 'all 0.2s'
-          }}
-          onMouseEnter={(e) => e.target.style.backgroundColor = '#1976d2'}
-          onMouseLeave={(e) => e.target.style.backgroundColor = '#1976d292'}
-        >
-          Export Bridge Config
-        </button>
-
-        {/* Check Connections */}
-        <button 
-          onClick={checkBridgeConnections}
-          style={{
-            backgroundColor: '#1976d292',
-            color: '#ffffff',
-            border: 'none',
-            padding: '4px 20px',
-            borderRadius: '6px',
-            fontSize: '12px',
-            fontWeight: '500',
-            cursor: 'pointer',
-            transition: 'all 0.2s'
-          }}
-          onMouseEnter={(e) => e.target.style.backgroundColor = '#1976d2'}
-          onMouseLeave={(e) => e.target.style.backgroundColor = '#1976d292'}
-        >
-          Check Connections
-        </button>
-      </div>
+      <img 
+        src={logo} 
+        alt="Sister Sylvester" 
+        style={{ 
+          width: '100%', 
+          height: '100%', 
+          objectFit: 'cover' 
+        }} 
+      />
     </div>
+    
+    <h1 style={{ 
+      margin: 0,
+      fontSize: '28px',
+      fontWeight: '700',
+      color: '#1a202c',
+      letterSpacing: '-0.5px'
+    }}>
+      Sister Sylvester LX Manager
+    </h1>
+  </div>
+
+  {/* Action Buttons - Right Aligned */}
+  <div style={{ display: 'flex', gap: '12px' }}>
+    {/* Import Bridge Config */}
+    <label style={{
+      backgroundColor: '#ffffff',
+      color: '#1976d2',
+      border: '1px solid #1976d2',
+      padding: '4px 20px',
+      borderRadius: '6px',
+      fontSize: '12px',
+      fontWeight: '500',
+      cursor: 'pointer',
+      transition: 'all 0.2s',
+      textAlign: 'center',
+      display: 'inline-block'
+    }}
+    onMouseEnter={(e) => e.target.style.backgroundColor = '#1976d21a'}
+    onMouseLeave={(e) => e.target.style.backgroundColor = '#ffffff'}>
+      Import Bridge Config
+      <input 
+        type="file" 
+        accept=".json"
+        onChange={handleImportBridgeConfig}
+        style={{ display: 'none' }}
+      />
+    </label>
+    
+    {/* Export Bridge Config */}
+    <button 
+      onClick={handleExportBridgeConfig}
+      style={{
+        backgroundColor: '#1976d292',
+        color: '#ffffff',
+        border: 'none',
+        padding: '4px 20px',
+        borderRadius: '6px',
+        fontSize: '12px',
+        fontWeight: '500',
+        cursor: 'pointer',
+        transition: 'all 0.2s'
+      }}
+      onMouseEnter={(e) => e.target.style.backgroundColor = '#1976d2'}
+      onMouseLeave={(e) => e.target.style.backgroundColor = '#1976d292'}
+    >
+      Export Bridge Config
+    </button>
+
+    {/* Check Connections */}
+    <button 
+      onClick={checkBridgeConnections}
+      style={{
+        backgroundColor: '#1976d292',
+        color: '#ffffff',
+        border: 'none',
+        padding: '4px 20px',
+        borderRadius: '6px',
+        fontSize: '12px',
+        fontWeight: '500',
+        cursor: 'pointer',
+        transition: 'all 0.2s'
+      }}
+      onMouseEnter={(e) => e.target.style.backgroundColor = '#1976d2'}
+      onMouseLeave={(e) => e.target.style.backgroundColor = '#1976d292'}
+    >
+      Check Connections
+    </button>
+  </div>
+</div>
 
     {/* Navigation Tabs - ALWAYS VISIBLE */}
     <div style={{ 
