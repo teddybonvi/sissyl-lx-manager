@@ -1,22 +1,28 @@
 {
   "name": "sissyl-lx-manager",
-  "version": "1.0.0",
+  "version": "1.1.4",
+  "type": "module",
   "description": "Sister Sylvester LX Manager - Philips Hue Bridge Management",
   "main": "electron/main.js",
-"scripts": {
-  "dev": "vite",
-  "server": "node server.js",
-  "start": "concurrently \"npm run server\" \"npm run dev\"",
-  "build": "vite build",
-  "electron:dev": "concurrently --kill-others \"npm run server\" \"npm run dev\" \"sleep 3 && cross-env NODE_ENV=development electron .\"",
-  "electron:build": "npm run build && electron-builder",
-  "electron:build:mac": "npm run build && electron-builder --mac",
-  "electron:build:win": "npm run build && electron-builder --win",
-  "electron:build:linux": "npm run build && electron-builder --linux"
-},
+  "scripts": {
+    "dev": "vite",
+    "server": "node server.js",
+    "start": "concurrently \"npm run server\" \"npm run dev\"",
+    "build": "vite build",
+    "electron:dev": "concurrently --kill-others \"npm run dev\" \"sleep 3 && cross-env NODE_ENV=development electron .\"",
+    "electron:build": "npm run build && electron-builder",
+    "electron:build:mac": "npm run build && electron-builder --mac",
+    "electron:build:win": "npm run build && electron-builder --win",
+    "electron:build:linux": "npm run build && electron-builder --linux"
+  },
   "build": {
     "appId": "com.sistersylvester.lxmanager",
     "productName": "Sister Sylvester LX Manager",
+    "publish": {
+      "provider": "github",
+      "owner": "teddybonvi",
+      "repo": "sissyl-lx-manager"
+    },
     "files": [
       "dist/**/*",
       "electron/**/*",
@@ -25,32 +31,64 @@
     ],
     "mac": {
       "category": "public.app-category.utilities",
-      "target": ["dmg", "zip"],
-      "icon": "build/icon.icns"
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "icon": "assets/icon.icns"
     },
+    "dmg": {
+  "contents": [
+    {
+      "x": 130,
+      "y": 220,
+      "type": "file"
+    },
+    {
+      "x": 410,
+      "y": 220,
+      "type": "link",
+      "path": "/Applications"
+    },
+    {
+      "x": 270,
+      "y": 350,
+      "type": "file",
+      "path": "install-sissyl.command"
+    }
+  ]
+},
     "win": {
-      "target": ["nsis", "portable"],
-      "icon": "build/icon.ico"
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "assets/icon.ico"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Utility"
     }
   },
   "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
     "axios": "^1.6.2",
-    "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "cors": "^2.8.6",
+    "electron-updater": "^6.7.3",
+    "express": "^4.22.1",
+    "osc": "^2.4.5",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
-    "vite": "^5.0.0",
     "@vitejs/plugin-react": "^4.2.0",
-    "electron": "^28.0.0",
-    "electron-builder": "^24.9.1",
     "concurrently": "^8.2.2",
-    "wait-on": "^7.2.0",
-    "cross-env": "^7.0.3"
+    "cross-env": "^7.0.3",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.9.1",
+    "vite": "^5.0.0",
+    "wait-on": "^7.2.0"
   }
 }
