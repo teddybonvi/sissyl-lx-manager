@@ -42,6 +42,17 @@ A professional lighting control system for Philips Hue bridges, designed for Sis
 - Individual bulb status indicators
 - Auto-refresh every 2 seconds
 
+### Headlamp Management (NEW in v1.2.0)
+- Wireless ESP8266-based headlamp control via OSC
+- Live unit discovery and status monitoring
+- Fleet registration with custom Fleet IDs and metadata
+- Group management (up to 8 groups) with custom names and colors
+- Multi-select control panel for RGB, fade, and effects
+- Venue map overlay for seat placement and unit assignment
+- OTA firmware updates for individual units or entire fleet
+- Battery monitoring and unreachable unit detection
+- Network settings configuration via app
+
 ## Installation
 
 ### Via Resilio Sync (Recommended)

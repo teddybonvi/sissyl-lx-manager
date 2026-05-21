@@ -997,7 +997,11 @@ const FleetManagementPage = ({
   onBack,
   installations,
   onAddInstallation,
-  onRemoveInstallation
+  onRemoveInstallation,
+  headlampFleet,
+  headlampData,
+  onUpdateHeadlamp,
+  onDeleteHeadlamp
 }) => {
 
 console.log("DEBUG: allBridgeData is:", allBridgeData);
@@ -1007,6 +1011,8 @@ console.log("DEBUG: allBridgeData is:", allBridgeData);
   const [filterInstallation, setFilterInstallation] = React.useState('all')
   const [newInstallation, setNewInstallation] = React.useState('')
   const [showInstallationManager, setShowInstallationManager] = React.useState(false)
+  const [editingHeadlamp, setEditingHeadlamp] = React.useState(null)
+  const [headlampEditForm, setHeadlampEditForm] = React.useState({ fleetId: '', name: '', installation: '', notes: '' })
   
   const bulbEntries = Object.entries(fleetDatabase)
   
@@ -1394,27 +1400,27 @@ return (
 
         {/* SAVE & CLOSE BUTTONS */}
         <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
-<button 
-  onClick={() => {
-    const updates = {
-      fleetId: document.getElementById('edit-fleet-id').value,  // ← ADD THIS
-      preferredName: document.getElementById('edit-preferred-name').value,
-      currentInstallation: document.getElementById('edit-installation').value,
-      notes: document.getElementById('edit-notes').value,
-      lastUpdated: new Date().toISOString()
-    };
-    
-    console.log('Saving updates:', updates);  // ← DEBUG
-    onUpdateBulb(editingBulb.uniqueid, updates);
-    setEditingBulb(null);
-  }}
-  style={{
-    flex: 2, padding: '12px', backgroundColor: '#3182ce', color: 'white',
-    border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600'
-  }}
->
-  Save Changes
-</button>
+          <button 
+            onClick={() => {
+              const updates = {
+                fleetId: document.getElementById('edit-fleet-id').value,  // ← ADD THIS
+                preferredName: document.getElementById('edit-preferred-name').value,
+                currentInstallation: document.getElementById('edit-installation').value,
+                notes: document.getElementById('edit-notes').value,
+                lastUpdated: new Date().toISOString()
+              };
+              
+              console.log('Saving updates:', updates);  // ← DEBUG
+              onUpdateBulb(editingBulb.uniqueid, updates);
+              setEditingBulb(null);
+            }}
+            style={{
+              flex: 2, padding: '12px', backgroundColor: '#3182ce', color: 'white',
+              border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600'
+            }}
+          >
+            Save Changes
+          </button>
           
           <button 
             onClick={() => {
@@ -1431,6 +1437,122 @@ return (
             Delete
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+)}
+
+{editingHeadlamp && (
+  <div style={{
+    position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+    display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
+  }}>
+    <div style={{
+      backgroundColor: 'white', padding: '32px', borderRadius: '12px',
+      width: '500px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)',
+      maxHeight: '90vh', overflowY: 'auto'
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+        <div>
+          <h2 style={{ margin: 0, fontSize: '20px' }}>Unit #{editingHeadlamp.unitNumber}</h2>
+          <p style={{ margin: 0, fontSize: '12px', color: '#718096' }}>Headlamp Management</p>
+        </div>
+        <button onClick={() => setEditingHeadlamp(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '24px' }}>&times;</button>
+      </div>
+
+      <div style={{ backgroundColor: '#f7fafc', padding: '12px', borderRadius: '6px', marginBottom: '16px', fontFamily: 'monospace', fontSize: '12px' }}>
+        <div>MAC: {editingHeadlamp.mac}</div>
+        <div>Added: {new Date(editingHeadlamp.addedAt).toLocaleDateString()}</div>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>Fleet ID</label>
+          <input
+            style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0' }}
+            value={headlampEditForm.fleetId}
+            onChange={(e) => setHeadlampEditForm({ ...headlampEditForm, fleetId: e.target.value.toUpperCase() })}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>Name</label>
+          <input
+            style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0' }}
+            value={headlampEditForm.name}
+            onChange={(e) => setHeadlampEditForm({ ...headlampEditForm, name: e.target.value })}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>Installation</label>
+          <select
+            style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0' }}
+            value={headlampEditForm.installation}
+            onChange={(e) => setHeadlampEditForm({ ...headlampEditForm, installation: e.target.value })}
+          >
+            <option value="">-- Unallocated --</option>
+            {installations.map(inst => <option key={inst} value={inst}>{inst}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#4a5568', marginBottom: '4px' }}>Notes</label>
+          <textarea
+            rows="3"
+            style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', resize: 'vertical' }}
+            value={headlampEditForm.notes}
+            onChange={(e) => setHeadlampEditForm({ ...headlampEditForm, notes: e.target.value })}
+          />
+        </div>
+
+        <div style={{ display: 'flex', gap: '12px', marginTop: '10px' }}>
+          <button
+            onClick={() => {
+              onUpdateHeadlamp(editingHeadlamp.mac, {
+                ...editingHeadlamp,
+                ...headlampEditForm,
+                lastUpdated: new Date().toISOString()
+              })
+              setEditingHeadlamp(null)
+            }}
+            style={{
+              flex: 2, padding: '12px', backgroundColor: '#3182ce', color: 'white',
+              border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '600'
+            }}
+          >
+            Save Changes
+          </button>
+          <button
+            onClick={() => {
+              if (window.confirm('Remove this headlamp from fleet?')) {
+                onDeleteHeadlamp(editingHeadlamp.mac)
+                setEditingHeadlamp(null)
+              }
+            }}
+            style={{
+              flex: 1, padding: '12px', backgroundColor: '#fff5f5', color: '#c53030',
+              border: '1px solid #feb2b2', borderRadius: '6px', cursor: 'pointer'
+            }}
+          >
+            Delete
+          </button>
+        </div>
+          <button
+            onClick={async () => {
+              if (!confirm(`Update firmware on unit #${editingHeadlamp.unitNumber}?`)) return
+              await window.electronAPI.runSingleOTAUpdate(editingHeadlamp.unitNumber)
+            }}
+            style={{
+              width: '100%', marginTop: '8px', padding: '10px',
+              backgroundColor: 'white', color: '#22c55e',
+              border: '1px solid #22c55e', borderRadius: '6px', cursor: 'pointer',
+              fontSize: '13px', fontWeight: '500'
+            }}
+          >
+            Update Firmware
+          </button>
       </div>
     </div>
   </div>
@@ -1484,6 +1606,121 @@ return (
     ))
   )}
 </div>
+
+{/* Headlamps Section */}
+      <div style={{ marginTop: '40px' }}>
+        <h2 style={{ fontSize: '22px', fontWeight: '700', marginBottom: '8px' }}>Headlamps</h2>
+        <p style={{ color: '#666', marginBottom: '16px' }}>
+          {Object.keys(headlampFleet).length} registered · {Object.values(headlampData).filter(u => !u.unreachable).length} online
+        </p>
+
+        {/* Table Header */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '150px 150px 1fr 200px 100px 160px 80px 80px 80px 100px',
+          gap: '12px',
+          padding: '8px 12px',
+          backgroundColor: '#edf2f7',
+          borderRadius: '6px 6px 0 0',
+          fontSize: '11px',
+          fontWeight: '700',
+          color: '#4a5568',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          borderBottom: '2px solid #cbd5e0'
+        }}>
+          <div>Fleet ID</div>
+          <div>Name</div>
+          <div>Unit #</div>
+          <div>Installation</div>
+          <div>Group</div>
+          <div>MAC</div>
+          <div>Firmware</div>
+          <div>Battery</div>
+          <div>Status</div>
+          <div>Actions</div>
+        </div>
+
+        <div style={{
+          border: '1px solid #e2e8f0',
+          borderRadius: '0 0 6px 6px',
+          overflow: 'hidden',
+          backgroundColor: 'white'
+        }}>
+          {Object.keys(headlampFleet).length === 0 ? (
+            <p style={{ color: '#666', textAlign: 'center', padding: '40px', margin: 0 }}>
+              No headlamps registered yet. Register them in the Headlamps tab.
+            </p>
+          ) : (
+            Object.values(headlampFleet)
+              .sort((a, b) => a.unitNumber - b.unitNumber)
+              .map(unit => {
+                const liveData = Object.values(headlampData).find(u => u.mac === unit.mac)
+                const isOnline = liveData && !liveData.unreachable
+                
+                return (
+                  <div key={unit.mac} style={{
+                    display: 'grid',
+                    gridTemplateColumns: '150px 150px 1fr 200px 100px 160px 80px 80px 80px 100px',
+                    gap: '12px',
+                    padding: '10px 12px',
+                    borderBottom: '1px solid #e2e8f0',
+                    alignItems: 'center',
+                    fontSize: '13px'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8f9fa'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'white'}
+                  >
+                    <div style={{ 
+                      fontWeight: '800',
+                      fontSize: '16px',
+                      color: unit.fleetId ? '#2d3748' : '#e53e3e'
+                    }}>
+                      {unit.fleetId || 'UNREGISTERED'}
+                    </div>
+                    <div style={{ fontWeight: '500' }}>{unit.name || 'Unnamed'}</div>
+                    <div style={{ fontWeight: '800', fontSize: '16px' }}>#{unit.unitNumber}</div>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>{unit.installation || 'Unassigned'}</div>
+                    <div style={{ fontSize: '12px', color: '#6b7280' }}>{liveData?.group || '—'}</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: '11px', color: '#6b7280' }}>{unit.mac}</div>
+                    <div style={{ fontSize: '12px', fontFamily: 'monospace', color: '#6b7280' }}>
+                      {liveData?.firmware || '—'}
+                    </div>
+                    <div style={{ fontSize: '12px' }}>
+                      {liveData ? `${Math.round(liveData.battery)}%` : '—'}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div style={{
+                        width: '8px', height: '8px', borderRadius: '50%',
+                        backgroundColor: isOnline ? '#48bb78' : '#f56565'
+                      }} />
+                      <span style={{ fontSize: '12px', fontWeight: '500' }}>
+                        {isOnline ? 'Online' : 'Offline'}
+                      </span>
+                    </div>
+                    <button 
+                      onClick={() => {
+                        setEditingHeadlamp(unit)
+                        setHeadlampEditForm({
+                          fleetId: unit.fleetId || '',
+                          name: unit.name || '',
+                          installation: unit.installation || '',
+                          notes: unit.notes || ''
+                        })
+                      }}
+                      style={{
+                        padding: '4px 10px', fontSize: '11px', backgroundColor: '#3182ce',
+                        color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '500'
+                      }}
+                    >
+                      Manage
+                    </button>
+                  </div>
+                )
+              })
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -2650,6 +2887,1742 @@ const QlabSyncPanel = () => {
   )
 }
 
+const VenueMapPage = ({ venueMap, onUpdateVenueMap, headlampData, headlampFleet, headlampGroups, onSendOSC }) => {
+  const [mode, setMode] = React.useState('view') // 'view', 'setup', 'assign'
+  const [selectedSeat, setSelectedSeat] = React.useState(null)
+  const [pendingSeat, setPendingSeat] = React.useState(null) // seat being placed
+  const [seatForm, setSeatForm] = React.useState({ name: '', group: '' })
+  const imageRef = React.useRef(null)
+
+  const seats = venueMap.seats || {}
+  const imageData = venueMap.imageData || null
+
+  const handleImageUpload = async (e) => {
+  const file = e.target.files[0]
+    if (!file) return
+
+    if (file.type === 'application/pdf') {
+      const arrayBuffer = await file.arrayBuffer()
+      const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise
+      const page = await pdf.getPage(1)
+      const viewport = page.getViewport({ scale: 2.0 })
+      
+      const canvas = document.createElement('canvas')
+      canvas.width = viewport.width
+      canvas.height = viewport.height
+      
+      await page.render({
+        canvasContext: canvas.getContext('2d'),
+        viewport
+      }).promise
+      
+      onUpdateVenueMap({ ...venueMap, imageData: canvas.toDataURL('image/png') })
+    } else {
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        onUpdateVenueMap({ ...venueMap, imageData: event.target.result })
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  console.log('headlampGroups in VenueMapPage:', headlampGroups)
+
+  const handleMapClick = (e) => {
+    if (mode !== 'setup') return
+    const rect = imageRef.current.getBoundingClientRect()
+    const x = (e.clientX - rect.left) / rect.width
+    const y = (e.clientY - rect.top) / rect.height
+    setPendingSeat({ x, y })
+    setSeatForm({ name: '', group: '' })
+  }
+
+  const handleSaveSeat = () => {
+    if (!pendingSeat || !seatForm.name) return
+    const id = `seat-${Date.now()}`
+    const newSeats = {
+      ...seats,
+      [id]: {
+        id,
+        name: seatForm.name,
+        group: seatForm.group || '',
+        x: pendingSeat.x,
+        y: pendingSeat.y,
+        unitNumber: null
+      }
+    }
+    onUpdateVenueMap({ ...venueMap, seats: newSeats })
+    setPendingSeat(null)
+    setSeatForm({ name: '', group: '' })
+  }
+
+  const handleAssignUnit = async (seatId, unitNumber) => {
+    const seat = seats[seatId]
+    const newSeats = {
+      ...seats,
+      [seatId]: { ...seat, unitNumber: unitNumber ? parseInt(unitNumber) : null }
+    }
+    onUpdateVenueMap({ ...venueMap, seats: newSeats })
+    
+    if (unitNumber && seat.group) {
+      await onSendOSC(`/unit/${unitNumber}/assign`, [
+        { type: 'string', value: seat.group }
+      ])
+      setTimeout(async () => {
+        await onSendOSC(`/unit/${unitNumber}/restore`, [])
+      }, 2000)
+    }
+    
+    setSelectedSeat(null)
+  }
+
+  const handleDeleteSeat = (seatId) => {
+    const newSeats = { ...seats }
+    delete newSeats[seatId]
+    onUpdateVenueMap({ ...venueMap, seats: newSeats })
+    setSelectedSeat(null)
+  }
+
+  const getUnitForSeat = (seat) => {
+    if (!seat.unitNumber) return null
+    return headlampData[seat.unitNumber] || null
+  }
+
+  const getDotColor = (unit, seat) => {
+    if (!unit) return 'rgba(156, 163, 175, 0.7)'
+    if (unit.unreachable) return '#ef4444'
+    const max = Math.max(unit.r, unit.g, unit.b)
+    if (max === 0) return 'rgba(34, 197, 94, 0.6)'
+    const scale = 255 / max
+    const r = Math.min(255, Math.round(unit.r * scale))
+    const g = Math.min(255, Math.round(unit.g * scale))
+    const b = Math.min(255, Math.round(unit.b * scale))
+    return `rgba(${r}, ${g}, ${b}, 0.65)`
+  }
+
+  const availableUnits = Object.values(headlampData).filter(u => 
+    !u.unreachable && 
+    (!u.group || u.group === 'unassigned') &&
+    !Object.values(seats).some(s => s.unitNumber === u.unitNumber)
+  )
+
+  return (
+    <div style={{ width: '100%' }}>
+      
+      {/* Toolbar */}
+      <div style={{ display: 'flex', gap: '12px', marginBottom: '16px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {['view', 'setup', 'assign'].map(m => (
+            <button
+              key={m}
+              onClick={() => { setMode(m); setSelectedSeat(null); setPendingSeat(null) }}
+              style={{
+                padding: '8px 16px', borderRadius: '6px', fontSize: '13px',
+                fontWeight: '500', cursor: 'pointer', border: 'none',
+                backgroundColor: mode === m ? '#6366f1' : '#f3f4f6',
+                color: mode === m ? 'white' : '#4a5568'
+              }}
+            >
+              {m === 'view' ? 'View' : m === 'setup' ? 'Setup' : 'Assign'}
+            </button>
+          ))}
+        </div>
+
+        <label style={{
+          padding: '8px 16px', backgroundColor: 'white', color: '#4a5568',
+          border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px',
+          fontWeight: '500', cursor: 'pointer'
+        }}>
+          {imageData ? 'Replace Image' : 'Upload Groundplan'}
+          <input type="file" accept=".pdf, image/*" onChange={handleImageUpload} style={{ display: 'none' }} />
+        </label>
+
+        <span style={{ fontSize: '12px', color: '#9ca3af' }}>
+          {Object.keys(seats).length} seats · {Object.values(seats).filter(s => s.unitNumber).length} assigned
+        </span>
+
+        {mode === 'setup' && (
+          <span style={{ fontSize: '12px', color: '#6366f1', fontWeight: '500' }}>
+            Click on the map to place a seat
+          </span>
+        )}
+        {mode === 'assign' && (
+          <span style={{ fontSize: '12px', color: '#6366f1', fontWeight: '500' }}>
+            Click a seat to assign or replace a unit
+          </span>
+        )}
+      </div>
+
+      {/* Pending seat form */}
+      {pendingSeat && (
+        <div style={{
+          backgroundColor: '#f0f9ff', border: '1px solid #bae6fd',
+          borderRadius: '8px', padding: '16px', marginBottom: '16px',
+          display: 'flex', gap: '12px', alignItems: 'flex-end'
+        }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>Seat Name</label>
+            <input
+              type="text" placeholder="e.g., A1"
+              value={seatForm.name}
+              onChange={(e) => setSeatForm({ ...seatForm, name: e.target.value.toUpperCase() })}
+              style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e0', fontSize: '14px' }}
+              autoFocus
+            />
+          </div>
+          <div>
+            <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>Group</label>
+            <select
+              value={seatForm.group}
+              onChange={(e) => setSeatForm({ ...seatForm, group: e.target.value })}
+              style={{ padding: '8px', borderRadius: '4px', border: '1px solid #cbd5e0', fontSize: '14px' }}
+            >
+              <option value="">-- None --</option>
+              {Object.entries(headlampGroups || {}).map(([key, g]) => (
+                <option key={key} value={key}>{g.displayName || key.toUpperCase()}</option>
+              ))}
+            </select>
+          </div>
+          <button
+            onClick={handleSaveSeat}
+            disabled={!seatForm.name}
+            style={{
+              padding: '8px 16px', backgroundColor: seatForm.name ? '#22c55e' : '#cbd5e0',
+              color: 'white', border: 'none', borderRadius: '6px',
+              fontSize: '13px', fontWeight: '600', cursor: seatForm.name ? 'pointer' : 'not-allowed'
+            }}
+          >
+            Place Seat
+          </button>
+          <button
+            onClick={() => setPendingSeat(null)}
+            style={{
+              padding: '8px 16px', backgroundColor: 'white', color: '#6b7280',
+              border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', cursor: 'pointer'
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Selected seat panel */}
+      {selectedSeat && seats[selectedSeat] && (
+        <div style={{
+          backgroundColor: '#fafafa', border: '1px solid #e2e8f0',
+          borderRadius: '8px', padding: '16px', marginBottom: '16px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+            <div>
+              <div style={{ fontWeight: '700', fontSize: '16px' }}>{seats[selectedSeat].name}</div>
+              <div style={{ fontSize: '12px', color: '#6b7280' }}>
+                Group: {headlampGroups[seats[selectedSeat].group]?.displayName || seats[selectedSeat].group || 'None'}
+              </div>
+              {seats[selectedSeat].unitNumber && (
+                <div style={{ fontSize: '12px', color: '#374151', marginTop: '4px' }}>
+                  Assigned: Unit #{seats[selectedSeat].unitNumber}
+                  {headlampData[seats[selectedSeat].unitNumber]?.unreachable && (
+                    <span style={{ color: '#ef4444', marginLeft: '8px' }}>⚠️ Unreachable</span>
+                  )}
+                </div>
+              )}
+            </div>
+            <button onClick={() => setSelectedSeat(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '20px' }}>×</button>
+          </div>
+
+          {mode === 'assign' && (
+            <div style={{ marginTop: '12px', display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <select
+                onChange={(e) => e.target.value && handleAssignUnit(selectedSeat, e.target.value)}
+                value=""
+                style={{ padding: '6px 10px', borderRadius: '4px', border: '1px solid #cbd5e07a', fontSize: '13px' }}
+              >
+                <option value="">{seats[selectedSeat].unitNumber ? 'Replace with...' : 'Assign unit...'}</option>
+                {Object.values(headlampData)
+                  .filter(u => !u.unreachable)
+                  .filter(u => !Object.values(seats).some(s => s.unitNumber === u.unitNumber && s.id !== selectedSeat))
+                  .sort((a, b) => a.unitNumber - b.unitNumber)
+                  .map(u => {
+                    const fleet = Object.values(headlampFleet).find(f => f.mac === u.mac)
+                    return (
+                      <option key={u.unitNumber} value={u.unitNumber}>
+                        #{u.unitNumber} {fleet?.name || ''} — {Math.round(u.battery)}% battery
+                      </option>
+                    )
+                  })
+                }
+              </select>
+              {seats[selectedSeat].unitNumber && (
+                <button
+                  onClick={() => handleAssignUnit(selectedSeat, null)}
+                  style={{
+                    padding: '6px 12px', backgroundColor: '#fff5f5', color: '#c53030',
+                    border: '1px solid #feb2b2', borderRadius: '4px', fontSize: '12px', cursor: 'pointer'
+                  }}
+                >
+                  Unassign
+                </button>
+              )}
+              {mode === 'setup' && (
+                <button
+                  onClick={() => handleDeleteSeat(selectedSeat)}
+                  style={{
+                    padding: '6px 12px', backgroundColor: '#fff5f5', color: '#c53030',
+                    border: '1px solid #feb2b2', borderRadius: '4px', fontSize: '12px', cursor: 'pointer'
+                  }}
+                >
+                  Delete Seat
+                </button>
+              )}
+            </div>
+          )}
+
+          {mode === 'setup' && (
+            <button
+              onClick={() => handleDeleteSeat(selectedSeat)}
+              style={{
+                marginTop: '12px', padding: '6px 12px', backgroundColor: '#fff5f5', color: '#c53030',
+                border: '1px solid #feb2b2', borderRadius: '4px', fontSize: '12px', cursor: 'pointer'
+              }}
+            >
+              Delete Seat
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Map */}
+      {!imageData ? (
+        <div style={{
+          border: '2px dashed #cbd5e0', borderRadius: '12px',
+          padding: '80px', textAlign: 'center', color: '#9ca3af'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🗺</div>
+          <div style={{ fontSize: '16px', fontWeight: '500' }}>No groundplan uploaded</div>
+          <div style={{ fontSize: '13px', marginTop: '8px' }}>Upload an image to get started</div>
+        </div>
+      ) : (
+        <div style={{ position: 'relative', display: 'inline-block', width: '100%' }}>
+          <img
+            ref={imageRef}
+            src={imageData}
+            alt="Venue map"
+            onClick={handleMapClick}
+            style={{
+              width: '100%', borderRadius: '8px', display: 'block',
+              cursor: mode === 'setup' ? 'crosshair' : 'default'
+            }}
+          />
+
+          {/* Pending seat indicator */}
+          {pendingSeat && (
+            <div style={{
+              position: 'absolute',
+              left: `${pendingSeat.x * 100}%`,
+              top: `${pendingSeat.y * 100}%`,
+              transform: 'translate(-50%, -50%)',
+              width: '20px', height: '20px', borderRadius: '50%',
+              backgroundColor: '#6366f1', border: '3px solid white',
+              boxShadow: '0 0 12px #6366f1',
+              animation: 'pulse 1s infinite'
+            }} />
+          )}
+
+          {/* Seat dots */}
+          {Object.values(seats).map(seat => {
+            const unit = getUnitForSeat(seat)
+            const dotColor = getDotColor(unit, seat)
+            const dotBrightness = (() => {
+              if (!unit) return 0
+              const max = Math.max(unit.r, unit.g, unit.b)
+              if (max === 0) return 0
+              const scale = 255 / max
+              const r = Math.min(255, Math.round(unit.r * scale))
+              const g = Math.min(255, Math.round(unit.g * scale))
+              const b = Math.min(255, Math.round(unit.b * scale))
+              return (r * 299 + g * 587 + b * 114) / 1000
+            })()
+            const isLowBattery = unit && unit.battery < 20
+            const isSelected = selectedSeat === seat.id
+            const groupColor = headlampGroups[seat.group] ? 
+              `rgb(${headlampGroups[seat.group].r * 5}, ${headlampGroups[seat.group].g * 5}, ${headlampGroups[seat.group].b * 5})` : 
+              '#9ca3af'
+
+            return (
+              <div
+                key={seat.id}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (mode === 'view' || mode === 'assign') setSelectedSeat(seat.id)
+                  if (mode === 'setup') setSelectedSeat(seat.id)
+                }}
+                style={{
+                  position: 'absolute',
+                  left: `${seat.x * 100}%`,
+                  top: `${seat.y * 100}%`,
+                  transform: 'translate(-50%, -50%)',
+                  cursor: 'pointer',
+                  zIndex: 10
+                }}
+              >
+                {/* Dot */}
+                <div style={{
+                  width: isSelected ? '36px' : '28px',
+                  height: isSelected ? '36px' : '28px',
+                  borderRadius: '50%',
+                  backgroundColor: unit?.unreachable ? '#fee2e2' : (unit ? dotColor : '#e5e7eb'),
+                  border: `3px solid ${isSelected ? '#6366f1' : unit?.unreachable ? '#ef4444' : dotBrightness > 200 ? '#9ca3af' : 'white'}`,
+                  boxShadow: unit?.unreachable 
+                    ? '0 0 16px #ef4444' 
+                    : unit ? `0 0 8px rgba(${Math.min(255, Math.round(unit.r * (255/Math.max(unit.r,unit.g,unit.b,1))))}, ${Math.min(255, Math.round(unit.g * (255/Math.max(unit.r,unit.g,unit.b,1))))}, ${Math.min(255, Math.round(unit.b * (255/Math.max(unit.r,unit.g,unit.b,1))))}, 0.5)` : 'none',
+                  animation: unit?.unreachable ? 'pulse 0.5s infinite' : isLowBattery ? 'pulse 1s infinite' : 'none',
+                  transition: 'all 0.2s',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '9px', fontWeight: '800', 
+                  color: unit?.unreachable ? '#ef4444' : 'white',
+                  textShadow: unit?.unreachable ? 'none' : '0 0 3px rgba(0,0,0,0.8)'
+                }}>
+                  {unit ? unit.unitNumber : ''}
+                </div>
+                {unit?.unreachable && (
+                <div style={{
+                  position: 'absolute',
+                  top: '-8px',
+                  right: '-8px',
+                  fontSize: '14px',
+                  filter: 'drop-shadow(0 0 3px rgba(0,0,0,0.5))'
+                }}>
+                  ⚠️
+                </div>
+              )}
+                {/* Label */}
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  marginTop: '2px',
+                  backgroundColor: 'rgba(0,0,0,0.7)',
+                  color: 'white',
+                  padding: '1px 4px',
+                  borderRadius: '3px',
+                  fontSize: '9px',
+                  fontWeight: '600',
+                  whiteSpace: 'nowrap',
+                  pointerEvents: 'none'
+                }}>
+                  {seat.name}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+const HeadlampsPage = ({ headlampData, headlampFleet, headlampGroups, venueMap, onUpdateVenueMap, onRegister, onSendOSC, installations }) => {
+  const [identifyingAll, setIdentifyingAll] = React.useState(false)
+  const [registeringUnit, setRegisteringUnit] = React.useState(null)
+  const [registerForm, setRegisterForm] = React.useState({ name: '', notes: '', fleetId: '', installation: '' })
+  const [currentView, setCurrentView] = React.useState('units')
+  const [selectedUnits, setSelectedUnits] = React.useState(new Set())
+  const [sliderMode, setSliderMode] = React.useState('fine')
+  const [color, setColor] = React.useState({ r: 0, g: 0, b: 0 })
+  const [fadeMs, setFadeMs] = React.useState(0)
+  const [fxRate, setFxRate] = React.useState(100)
+  const [fxMin, setFxMin] = React.useState(0)
+  const [fxMax, setFxMax] = React.useState(50)
+  
+  const units = Object.values(headlampData).sort((a, b) => a.unitNumber - b.unitNumber)
+
+  const groupedUnits = React.useMemo(() => {
+    const groups = {}
+    units.forEach(unit => {
+      const group = unit.group || 'unassigned'
+      if (!groups[group]) groups[group] = []
+      groups[group].push(unit)
+    })
+    // Move unassigned to end
+    const { unassigned, ...rest } = groups
+    return unassigned ? { ...rest, unassigned } : rest
+  }, [units])
+
+  const toggleUnit = (unitNumber) => {
+    setSelectedUnits(prev => {
+      const next = new Set(prev)
+      if (next.has(unitNumber)) {
+        next.delete(unitNumber)
+      } else {
+        next.add(unitNumber)
+      }
+      return next
+    })
+  }
+
+  const toggleGroup = (groupName) => {
+    const groupUnitNumbers = (groupedUnits[groupName] || []).map(u => u.unitNumber)
+    const allSelected = groupUnitNumbers.every(n => selectedUnits.has(n))
+    setSelectedUnits(prev => {
+      const next = new Set(prev)
+      if (allSelected) {
+        groupUnitNumbers.forEach(n => next.delete(n))
+      } else {
+        groupUnitNumbers.forEach(n => next.add(n))
+      }
+      return next
+    })
+  }
+  
+  const getColor = (r, g, b) => {
+    if (r === 0 && g === 0 && b === 0) return '#1a1a1a'
+    const ceiling = 50
+    const scale = 255 / ceiling
+    return `rgb(${Math.min(255, Math.round(r * scale))}, ${Math.min(255, Math.round(g * scale))}, ${Math.min(255, Math.round(b * scale))})`
+  }
+  
+  const getEffectLabel = (unit) => {
+    if (unit.strobing) return 'STROBE'
+    if (unit.pulsing) return 'PULSE'
+    if (unit.fading) return 'FADING'
+    return null
+  }
+  
+  const timeSince = (lastSeen) => {
+    const seconds = Math.floor((Date.now() - lastSeen) / 1000)
+    if (seconds < 60) return `${seconds}s ago`
+    return `${Math.floor(seconds / 60)}m ago`
+  }
+
+  return (
+    <div style={{ width: '100%', padding: '0 20px', boxSizing: 'border-box' }}>
+      
+      {/* Registration Modal */}
+      {registeringUnit && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white', padding: '32px', borderRadius: '12px',
+            width: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0 }}>Register Headlamp</h2>
+              <button onClick={() => setRegisteringUnit(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '24px' }}>×</button>
+            </div>
+            
+            <div style={{ backgroundColor: '#f7fafc', padding: '12px', borderRadius: '6px', marginBottom: '16px', fontFamily: 'monospace', fontSize: '12px' }}>
+              <div>Unit #{registeringUnit.unitNumber}</div>
+              <div>MAC: {registeringUnit.mac}</div>
+              <div>Group: {registeringUnit.group}</div>
+            </div>
+            
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontWeight: '600', marginBottom: '6px', fontSize: '13px' }}>Name</label>
+              <input
+                type="text"
+                placeholder="e.g., KH Unit 19"
+                value={registerForm.name}
+                onChange={(e) => setRegisterForm({ ...registerForm, name: e.target.value })}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', fontSize: '14px' }}
+              />
+            </div>
+            
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', fontWeight: '600', marginBottom: '6px', fontSize: '13px' }}>Notes</label>
+              <textarea
+                rows={3}
+                value={registerForm.notes}
+                onChange={(e) => setRegisterForm({ ...registerForm, notes: e.target.value })}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', fontSize: '14px', resize: 'vertical' }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontWeight: '600', marginBottom: '6px', fontSize: '13px' }}>Fleet ID</label>
+              <input
+                type="text"
+                placeholder="e.g., HL-019"
+                value={registerForm.fleetId || ''}
+                onChange={(e) => setRegisterForm({ ...registerForm, fleetId: e.target.value.toUpperCase() })}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', fontSize: '14px' }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontWeight: '600', marginBottom: '6px', fontSize: '13px' }}>Installation</label>
+              <select
+                value={registerForm.installation || ''}
+                onChange={(e) => setRegisterForm({ ...registerForm, installation: e.target.value })}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', fontSize: '14px' }}
+              >
+                <option value="">-- Unallocated --</option>
+                {installations.map(inst => (
+                  <option key={inst} value={inst}>{inst}</option>
+                ))}
+              </select>
+            </div>
+            
+            <button
+              onClick={() => {
+                onRegister(registeringUnit.mac, {
+                  mac: registeringUnit.mac,
+                  unitNumber: registeringUnit.unitNumber,
+                  fleetId: registerForm.fleetId || `HL-${registeringUnit.unitNumber}`,
+                  name: registerForm.name || `Unit ${registeringUnit.unitNumber}`,
+                  installation: registerForm.installation || '',
+                  notes: registerForm.notes,
+                  addedAt: new Date().toISOString()
+                })
+                setRegisteringUnit(null)
+                setRegisterForm({ name: '', notes: '' })
+              }}
+              style={{
+                width: '100%', padding: '12px', backgroundColor: '#22c55e',
+                color: 'white', border: 'none', borderRadius: '6px',
+                fontSize: '14px', fontWeight: '600', cursor: 'pointer'
+              }}
+            >
+              Register
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Header */}
+        <div style={{ marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h1 style={{ fontSize: '28px', fontWeight: '700', marginBottom: '8px' }}>Headlamp Monitor</h1>
+            <p style={{ color: '#666', margin: 0 }}>
+              {units.length} unit{units.length !== 1 ? 's' : ''} discovered · {Object.keys(headlampFleet).length} registered
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={() => setCurrentView(currentView === 'units' ? 'map' : 'units')}
+            style={{
+              backgroundColor: currentView === 'map' ? '#6366f1' : 'white',
+              color: currentView === 'map' ? 'white' : '#6366f1',
+              border: '1px solid #6366f1',
+              padding: '10px 20px', borderRadius: '6px', fontSize: '14px',
+              fontWeight: '600', cursor: 'pointer'
+            }}
+          >
+            {currentView === 'map' ? '← Unit Cards' : 'Venue Map'}
+          </button>
+          <button
+            onClick={async () => {
+              if (identifyingAll) {
+                await onSendOSC('/all/restore', [])
+                setIdentifyingAll(false)
+              } else {
+                await onSendOSC('/all/identify', [])
+                setIdentifyingAll(true)
+              }
+            }}
+            style={{
+              backgroundColor: identifyingAll ? '#f59e0b' : '#22c55e',
+              color: 'white', border: 'none',
+              padding: '10px 20px', borderRadius: '6px', fontSize: '14px',
+              fontWeight: '600', cursor: 'pointer'
+            }}
+          >
+            {identifyingAll ? 'Restore All' : 'Identify All'}
+          </button>
+        </div>
+      </div>
+
+      {units.length === 0 ? (
+        <div style={{ textAlign: 'center', color: '#9ca3af', padding: '80px' }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>💡</div>
+          <div style={{ fontSize: '16px', fontWeight: '500' }}>No headlamps discovered yet</div>
+          <div style={{ fontSize: '13px', marginTop: '8px' }}>Units will appear here when they broadcast their status</div>
+        </div>
+      ) : (
+        <div style={{ paddingBottom: selectedUnits.size > 0 ? '200px' : '0' }}>
+          {Object.entries(groupedUnits).map(([groupName, groupUnits]) => {
+            const groupData = headlampGroups[groupName]
+            const allSelected = groupUnits.every(u => selectedUnits.has(u.unitNumber))
+            const someSelected = groupUnits.some(u => selectedUnits.has(u.unitNumber))
+            const rgb = groupData ? (() => {
+              const max = Math.max(groupData.r, groupData.g, groupData.b)
+              if (max === 0) return { r: 100, g: 100, b: 100 }
+              const scale = 255 / max
+              return {
+                r: Math.min(255, Math.round(groupData.r * scale)),
+                g: Math.min(255, Math.round(groupData.g * scale)),
+                b: Math.min(255, Math.round(groupData.b * scale))
+              }
+            })() : { r: 150, g: 150, b: 150 }
+
+            return (
+              <div key={groupName} style={{ marginBottom: '24px' }}>
+                {/* Group Header */}
+                <div
+                  onClick={() => toggleGroup(groupName)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '12px',
+                    marginBottom: '12px', cursor: 'pointer', userSelect: 'none',
+                    padding: '8px 12px', borderRadius: '8px',
+                    backgroundColor: allSelected ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.15)` : 
+                                    someSelected ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.07)` : 'transparent',
+                    border: `2px solid ${allSelected ? `rgba(${rgb.r},${rgb.g},${rgb.b},0.6)` : 'transparent'}`,
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <div style={{
+                    width: '16px', height: '16px', borderRadius: '50%',
+                    backgroundColor: `rgb(${rgb.r},${rgb.g},${rgb.b})`,
+                    border: '2px solid rgba(0,0,0,0.1)', flexShrink: 0
+                  }} />
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700' }}>
+                    {groupData?.displayName || groupName.toUpperCase()}
+                  </h3>
+                  <span style={{ fontSize: '12px', color: '#9ca3af' }}>
+                    {groupUnits.length} unit{groupUnits.length !== 1 ? 's' : ''}
+                  </span>
+                  {someSelected && (
+                    <span style={{ fontSize: '11px', color: '#6366f1', fontWeight: '600', marginLeft: 'auto' }}>
+                      {groupUnits.filter(u => selectedUnits.has(u.unitNumber)).length} selected
+                    </span>
+                  )}
+                </div>
+
+                {/* Unit Cards Grid */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '12px' }}>
+                  {groupUnits.map(unit => {
+                    const color = getColor(unit.r, unit.g, unit.b)
+                    const effect = getEffectLabel(unit)
+                    const fleetData = Object.values(headlampFleet).find(f => f.mac === unit.mac)
+                    const isRegistered = !!fleetData
+                    const isSelected = selectedUnits.has(unit.unitNumber)
+
+                    return (
+                      <div
+                        key={unit.unitNumber}
+                        onClick={() => toggleUnit(unit.unitNumber)}
+                        style={{
+                          backgroundColor: 'white',
+                          border: `2px solid ${isSelected ? '#6366f1' : unit.unreachable ? '#ff0000' : '#22c55e'}`,
+                          borderRadius: '8px',
+                          padding: '16px',
+                          opacity: unit.unreachable ? 0.5 : 1,
+                          position: 'relative',
+                          cursor: 'pointer',
+                          boxShadow: isSelected ? '0 0 0 3px rgba(99,102,241,0.2)' : 'none',
+                          transition: 'all 0.15s'
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <div style={{ fontSize: '24px', fontWeight: '800', color: '#1a202c' }}>
+                            #{unit.unitNumber}
+                          </div>
+                          <div style={{
+                            width: '32px', height: '32px', borderRadius: '50%',
+                            backgroundColor: color, border: '2px solid #e5e7eb',
+                            boxShadow: color !== '#1a1a1a' ? `0 0 8px ${color}` : 'none'
+                          }} />
+                        </div>
+
+                        {fleetData?.name && (
+                          <div style={{ fontSize: '13px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                            {fleetData.name}
+                            {fleetData?.fleetId && (
+                              <div style={{ fontSize: '11px', fontStyle: 'italic', color: '#6b7280' }}>{fleetData.fleetId}</div>
+                            )}
+                          </div>
+                        )}
+
+                        {effect && (
+                          <div style={{
+                            display: 'inline-block', padding: '2px 8px',
+                            backgroundColor: '#fef3c7', color: '#92400e',
+                            borderRadius: '4px', fontSize: '11px', fontWeight: '700', marginBottom: '4px'
+                          }}>
+                            {effect}
+                          </div>
+                        )}
+
+                        <div style={{ marginBottom: '4px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>
+                            <span>Battery</span>
+                            <span style={{ fontWeight: '600', color: unit.battery < 20 ? '#ef4444' : '#374151' }}>
+                              {Math.round(unit.battery)}%
+                            </span>
+                          </div>
+                          <div style={{ height: '4px', backgroundColor: '#e5e7eb', borderRadius: '2px' }}>
+                            <div style={{
+                              height: '100%', width: `${unit.battery}%`,
+                              backgroundColor: unit.battery < 20 ? '#ef4444' : '#22c55e',
+                              borderRadius: '2px', transition: 'width 0.3s'
+                            }} />
+                          </div>
+                        </div>
+
+                        <div style={{ fontSize: '10px', color: '#9ca3af', fontFamily: 'monospace' }}>
+                          <div>{unit.mac}</div>
+                          <div>{unit.ip} • {timeSince(unit.lastSeen)}</div>
+                        </div>
+
+                        {!isRegistered && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setRegisteringUnit(unit)
+                              setRegisterForm({ name: '', notes: '' })
+                            }}
+                            style={{
+                              marginTop: '8px', width: '100%', padding: '6px',
+                              backgroundColor: '#f0fdf4', color: '#16a34a',
+                              border: '1px solid #86efac', borderRadius: '4px',
+                              fontSize: '12px', fontWeight: '600', cursor: 'pointer'
+                            }}
+                          >
+                            + Register
+                          </button>
+                        )}
+
+                        {isSelected && (
+                          <div style={{
+                            position: 'absolute', top: '6px', left: '6px',
+                            width: '18px', height: '18px', borderRadius: '50%',
+                            backgroundColor: '#6366f1', display: 'flex',
+                            alignItems: 'center', justifyContent: 'center'
+                          }}>
+                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: 'white' }} />
+                          </div>
+                        )}
+
+                        {unit.unreachable && (
+                          <div style={{ position: 'absolute', bottom: '8px', right: '8px', fontSize: '18px', opacity: 2 }}>
+                            ⚠️
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {currentView === 'map' && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'white',
+          zIndex: 500,
+          overflow: 'auto',
+          padding: '20px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <h2 style={{ margin: 0 }}>Venue Map</h2>
+            <button
+              onClick={() => setCurrentView('units')}
+              style={{
+                padding: '8px 20px', backgroundColor: 'white', color: '#4a5568',
+                border: '1px solid #e2e8f0', borderRadius: '6px',
+                fontSize: '14px', fontWeight: '500', cursor: 'pointer'
+              }}
+            >
+              ✕ Close
+            </button>
+          </div>
+          <VenueMapPage
+            venueMap={venueMap}
+            onUpdateVenueMap={onUpdateVenueMap}
+            headlampData={headlampData}
+            headlampFleet={headlampFleet}
+            headlampGroups={headlampGroups}
+            onSendOSC={onSendOSC} 
+          />
+        </div>
+      )}
+
+      {/* Control Panel */}
+      {selectedUnits.size > 0 && (
+        <div style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0,
+          backgroundColor: 'white', borderTop: '2px solid #e2e8f0',
+          padding: '20px 24px', zIndex: 400,
+          boxShadow: '0 -8px 30px rgba(0,0,0,0.12)'
+        }}>
+          <div style={{ display: 'flex', gap: '24px', alignItems: 'stretch', minHeight: '120px' }}>
+
+            {/* Target info + color preview */}
+            <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '8px', flexShrink: 0, minWidth: '100px' }}>
+              <div style={{
+                width: '48px', height: '48px', borderRadius: '50%',
+                backgroundColor: `rgb(${Math.min(255, Math.round(color.r * (sliderMode === 'fine' ? 255/50 : 1)))}, ${Math.min(255, Math.round(color.g * (sliderMode === 'fine' ? 255/50 : 1)))}, ${Math.min(255, Math.round(color.b * (sliderMode === 'fine' ? 255/50 : 1)))})`,
+                border: '2px solid #e2e8f0',
+                boxShadow: `0 0 16px rgba(${Math.min(255, Math.round(color.r * (sliderMode === 'fine' ? 255/50 : 1)))}, ${Math.min(255, Math.round(color.g * (sliderMode === 'fine' ? 255/50 : 1)))}, ${Math.min(255, Math.round(color.b * (sliderMode === 'fine' ? 255/50 : 1)))}, 0.6)`
+              }} />
+              <div>
+                <div style={{ fontWeight: '700', fontSize: '14px' }}>{selectedUnits.size} unit{selectedUnits.size !== 1 ? 's' : ''}</div>
+                <button
+                  onClick={() => setSelectedUnits(new Set())}
+                  style={{ fontSize: '11px', color: '#9ca3af', border: 'none', background: 'none', cursor: 'pointer', padding: 0 }}
+                >
+                  clear
+                </button>
+              </div>
+              {/* Fine/Full toggle */}
+              <button
+                onClick={() => {
+                  setSliderMode(sliderMode === 'fine' ? 'full' : 'fine')
+                  setColor({ r: 0, g: 0, b: 0 })
+                }}
+                style={{
+                  padding: '4px 8px', borderRadius: '4px', fontSize: '11px',
+                  fontWeight: '600', cursor: 'pointer', border: '1px solid #e2e8f0',
+                  backgroundColor: sliderMode === 'fine' ? '#6366f1' : '#f3f4f6',
+                  color: sliderMode === 'fine' ? 'white' : '#4a5568'
+                }}
+              >
+                {sliderMode === 'fine' ? '0–50' : '0–255'}
+              </button>
+            </div>
+
+            {/* Divider */}
+            <div style={{ width: '1px', backgroundColor: '#e2e8f0', flexShrink: 0 }} />
+
+            {/* RGB + Fade sliders */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '8px' }}>
+              {['r', 'g', 'b'].map(channel => (
+                <div key={channel} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span style={{
+                    width: '14px', fontSize: '12px', fontWeight: '700',
+                    color: channel === 'r' ? '#ef4444' : channel === 'g' ? '#22c55e' : '#3b82f6'
+                  }}>
+                    {channel.toUpperCase()}
+                  </span>
+                  <input
+                    type="range" min="0" max={sliderMode === 'fine' ? 50 : 255}
+                    value={color[channel]}
+                    onChange={(e) => setColor({ ...color, [channel]: parseInt(e.target.value) })}
+                    style={{ flex: 1 }}
+                  />
+                  <span style={{ width: '32px', fontSize: '12px', textAlign: 'right', color: '#374151', fontWeight: '600' }}>
+                    {color[channel]}
+                  </span>
+                </div>
+              ))}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span style={{ width: '14px', fontSize: '12px', fontWeight: '700', color: '#9ca3af' }}>F</span>
+                <input
+                  type="range" min="0" max="30000" step="100"
+                  value={fadeMs}
+                  onChange={(e) => setFadeMs(parseInt(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ width: '52px', fontSize: '12px', textAlign: 'right', color: '#374151', fontWeight: '600' }}>
+                  {fadeMs >= 1000 ? `${(fadeMs/1000).toFixed(1)}s` : `${fadeMs}ms`}
+                </span>
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div style={{ width: '1px', backgroundColor: '#e2e8f0', flexShrink: 0 }} />
+
+            {/* Button groups */}
+            <div style={{ display: 'flex', gap: '16px', alignItems: 'stretch', flexShrink: 0 }}>
+              
+              {/* Direct commands */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', justifyContent: 'center' }}>
+                <div style={{ fontSize: '10px', fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>Direct</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                  {[
+                    { label: 'Black', color: '#374151', action: async () => {
+                      for (const u of selectedUnits) await onSendOSC(`/unit/${u}/black`, [])
+                    }},
+                    { label: 'Blackout', color: '#111827', action: async () => {
+                      await onSendOSC('/blackout', [])
+                    }},
+                    { label: 'Identify', color: '#3b82f6', action: async () => {
+                      for (const u of selectedUnits) await onSendOSC(`/unit/${u}/identify`, [])
+                    }},
+                    { label: 'Restore', color: '#10b981', action: async () => {
+                      for (const u of selectedUnits) await onSendOSC(`/unit/${u}/restore`, [])
+                    }}
+                  ].map(btn => (
+                    <button key={btn.label} onClick={btn.action} style={{
+                      padding: '8px 12px', backgroundColor: btn.color,
+                      color: 'white', border: 'none', borderRadius: '6px',
+                      fontSize: '12px', fontWeight: '600', cursor: 'pointer'
+                    }}>
+                      {btn.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* FX commands */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', justifyContent: 'center' }}>
+                <div style={{ fontSize: '10px', fontWeight: '700', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '2px' }}>FX</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                  {[
+                    { label: 'Strobe', color: '#f59e0b', action: async () => {
+                      for (const u of selectedUnits) await onSendOSC(`/unit/${u}/strobe`, [
+                        { type: 'integer', value: fxRate }
+                      ])
+                    }},
+                    { label: 'Pulse', color: '#8b5cf6', action: async () => {
+                      for (const u of selectedUnits) await onSendOSC(`/unit/${u}/pulse`, [
+                        { type: 'integer', value: fxMax },
+                        { type: 'integer', value: fxMin },
+                        { type: 'integer', value: fxRate }
+                      ])
+                    }},
+                    { label: 'Stop FX', color: '#6b7280', action: async () => {
+                      for (const u of selectedUnits) await onSendOSC(`/unit/${u}/stop-effect`, [])
+                    }}
+                  ].map(btn => (
+                    <button key={btn.label} onClick={btn.action} style={{
+                      padding: '8px 12px', backgroundColor: btn.color,
+                      color: 'white', border: 'none', borderRadius: '6px',
+                      fontSize: '12px', fontWeight: '600', cursor: 'pointer'
+                    }}>
+                      {btn.label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
+                  {[
+                    { label: 'Rate', value: fxRate, setter: setFxRate, min: 10, max: 5000 },
+                    { label: 'Max', value: fxMax, setter: setFxMax, min: 0, max: sliderMode === 'fine' ? 50 : 255 },
+                    { label: 'Min', value: fxMin, setter: setFxMin, min: 0, max: sliderMode === 'fine' ? 50 : 255 },
+                  ].map(({ label, value, setter, min, max }) => (
+                    <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ width: '28px', fontSize: '11px', fontWeight: '700', color: '#9ca3af' }}>{label}</span>
+                      <input
+                        type="range" min={min} max={max}
+                        value={value}
+                        onChange={(e) => setter(parseInt(e.target.value))}
+                        style={{ flex: 1, width: '80px' }}
+                      />
+                      <span style={{ width: '28px', fontSize: '11px', textAlign: 'right', color: '#374151' }}>{value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Divider */}
+            <div style={{ width: '1px', backgroundColor: '#e2e8f0', flexShrink: 0 }} />
+
+            {/* Send button - full height */}
+            <button
+              onClick={async () => {
+                const r = color.r
+                const g = color.g
+                const b = color.b
+                for (const unitNumber of selectedUnits) {
+                  await onSendOSC(`/unit/${unitNumber}/set`, [
+                    { type: 'integer', value: r },
+                    { type: 'integer', value: g },
+                    { type: 'integer', value: b },
+                    { type: 'integer', value: fadeMs }
+                  ])
+                }
+              }}
+              style={{
+                padding: '0 32px',
+                backgroundColor: '#22c55e',
+                color: 'white', border: 'none', borderRadius: '10px',
+                fontSize: '18px', fontWeight: '800', cursor: 'pointer',
+                letterSpacing: '1px', flexShrink: 0,
+                alignSelf: 'stretch'
+              }}
+            >
+              SEND
+            </button>
+
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+    
+
+const HeadlampManagerPage = ({ headlampData, headlampFleet, headlampGroups, onSaveGroup, onDeleteGroup, onAssignUnit, onBack, installations, onUpdateFleetEntry}) => {
+  const [selectedGroup, setSelectedGroup] = React.useState(null)
+  const [showCreateGroup, setShowCreateGroup] = React.useState(false)
+  const [newGroupName, setNewGroupName] = React.useState('')
+  const [newGroupDisplayName, setNewGroupDisplayName] = React.useState('')
+  const [newGroupColor, setNewGroupColor] = React.useState({ r: 255, g: 255, b: 255 })
+  const [showNetworkSettings, setShowNetworkSettings] = React.useState(false)
+  const [networkForm, setNetworkForm] = React.useState({ ssid: '', password: '' })
+  const [editingGroup, setEditingGroup] = React.useState(null)
+  const [editGroupForm, setEditGroupForm] = React.useState({ displayName: '', r: 0, g: 0, b: 0 })
+  const [identifyingAll, setIdentifyingAll] = React.useState(false)
+  const [identifyingGroups, setIdentifyingGroups] = React.useState({})
+  const [settingNumberFor, setSettingNumberFor] = React.useState(null)
+  const [newUnitNumber, setNewUnitNumber] = React.useState('')
+
+  const units = Object.values(headlampData).sort((a, b) => a.unitNumber - b.unitNumber)
+  const unassignedUnits = units.filter(u => !u.group || u.group === 'unassigned')
+
+  const effectiveGroups = {
+    ...units.reduce((acc, unit) => {
+      if (unit.group && unit.group !== 'unassigned') {
+        if (!headlampGroups[unit.group]) {
+          acc[unit.group] = { name: unit.group, r: 0, g: 0, b: 255 }
+        }
+      }
+      return acc
+    }, {}),
+    ...headlampGroups
+  }
+
+  const getGroupDisplayName = (groupName) => {
+    if (!groupName || groupName === 'unassigned') return 'Unassigned'
+    const group = effectiveGroups[groupName]
+    return group?.displayName || groupName.toUpperCase()
+  }
+
+  const groupCount = Object.keys(effectiveGroups).length
+  
+  console.log('headlampData:', headlampData)
+  console.log('units:', units)
+  console.log('headlampGroups:', headlampGroups)
+  console.log('effectiveGroups:', effectiveGroups)
+  console.log('groupCount:', groupCount)
+  console.log('unassignedUnits:', unassignedUnits)
+
+  const getUnitColor = (r, g, b) => {
+    if (r === 0 && g === 0 && b === 0) return '#1a1a1a'
+    const ceiling = 50
+    const scale = 255 / ceiling
+    return `rgb(${Math.min(255, Math.round(r * scale))}, ${Math.min(255, Math.round(g * scale))}, ${Math.min(255, Math.round(b * scale))})`
+  }
+
+  const getGroupColor = (group) => {
+    if (!group) return '#e5e7eb'
+    const g = headlampGroups[group]
+    if (!g) return '#e5e7eb'
+    const max = Math.max(g.r, g.g, g.b)
+    if (max === 0) return '#e5e7eb'
+    const scale = 255 / max
+    return `rgb(${Math.min(255, Math.round(g.r * scale))}, ${Math.min(255, Math.round(g.g * scale))}, ${Math.min(255, Math.round(g.b * scale))})`
+  }
+  
+  const getGroupRGB = (group) => {
+    const max = Math.max(group.r || 0, group.g || 0, group.b || 0)
+    if (max === 0) return { r: 100, g: 100, b: 100 }
+    const scale = 255 / max
+    return {
+      r: Math.min(255, Math.round((group.r || 0) * scale)),
+      g: Math.min(255, Math.round((group.g || 0) * scale)),
+      b: Math.min(255, Math.round((group.b || 0) * scale))
+    }
+  }
+
+  const UnitCard = ({ unit, compact }) => {
+    const fleetData = Object.values(headlampFleet).find(f => f.mac === unit.mac)
+    const color = getUnitColor(unit.r, unit.g, unit.b)
+
+    return (
+      <div style={{
+        backgroundColor: 'white',
+        border: `1px solid ${unit.unreachable ? '#e5e7eb' : '#d1fae5'}`,
+        borderRadius: '6px',
+        padding: '10px',
+        opacity: unit.unreachable ? 0.5 : 1,
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px'
+      }}>
+        <div style={{
+          width: '24px', height: '24px', borderRadius: '50%',
+          backgroundColor: color, border: '2px solid #e5e7eb', flexShrink: 0,
+          boxShadow: color !== '#1a1a1a' ? `0 0 6px ${color}` : 'none'
+        }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: '700', fontSize: '14px' }}>#{unit.unitNumber}</div>
+          {fleetData?.fleetId && (
+            <div style={{ fontSize: '11px', fontWeight: '800', color: '#2d3748' }}>{fleetData.fleetId}</div>
+          )}
+          {fleetData?.name && (
+            <div style={{ fontSize: '11px', color: '#6b7280', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {fleetData.name}
+            </div>
+          )}
+          <div style={{ fontSize: '10px', color: '#9ca3af', fontFamily: 'monospace' }}>{unit.mac}</div>
+          <div style={{ fontSize: '10px', color: '#9ca3af' }}>FW: {unit.firmware || 'unknown'}</div>
+        </div>
+        {unit.unreachable && <div style={{ fontSize: '14px', opacity: 2 }}>⚠️</div>}
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ width: '100%', maxWidth: 'none', padding: '0 20px', boxSizing: 'border-box' }}>
+      
+      {/* Network Settings Modal */}
+      {showNetworkSettings && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white', padding: '32px', borderRadius: '12px',
+            width: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0 }}>Network Settings</h2>
+              <button onClick={() => setShowNetworkSettings(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '24px' }}>×</button>
+            </div>
+            <div style={{ backgroundColor: '#fef3c7', padding: '12px', borderRadius: '6px', marginBottom: '16px', fontSize: '12px', color: '#92400e' }}>
+              ⚠️ All units will reboot after saving. Make sure your laptop is on the new network before sending.
+            </div>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontWeight: '600', marginBottom: '6px', fontSize: '13px' }}>Network Name (SSID)</label>
+              <input
+                type="text"
+                value={networkForm.ssid}
+                onChange={(e) => setNetworkForm({ ...networkForm, ssid: e.target.value })}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', fontSize: '14px' }}
+              />
+            </div>
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', fontWeight: '600', marginBottom: '6px', fontSize: '13px' }}>Password</label>
+              <input
+                type="text"
+                value={networkForm.password}
+                onChange={(e) => setNetworkForm({ ...networkForm, password: e.target.value })}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', fontSize: '14px' }}
+              />
+            </div>
+            <button
+              onClick={async () => {
+                if (!networkForm.ssid || !networkForm.password) {
+                  alert('Please enter both SSID and password')
+                  return
+                }
+                if (!confirm(`Switch all headlamps to "${networkForm.ssid}"? They will reboot.`)) return
+                await window.electronAPI.sendOSCToHeadlamps('/all/setnetwork', [
+                  { type: 'string', value: networkForm.ssid },
+                  { type: 'string', value: networkForm.password }
+                ])
+                setShowNetworkSettings(false)
+              }}
+              style={{
+                width: '100%', padding: '12px', backgroundColor: '#ef4444',
+                color: 'white', border: 'none', borderRadius: '6px',
+                fontSize: '14px', fontWeight: '600', cursor: 'pointer'
+              }}
+            >
+              Save & Reboot All Units
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Create Group Modal */}
+      {showCreateGroup && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white', padding: '32px', borderRadius: '12px',
+            width: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0 }}>Create Group</h2>
+              <button onClick={() => setShowCreateGroup(false)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '24px' }}>×</button>
+            </div>
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontWeight: '600', marginBottom: '6px', fontSize: '13px' }}>
+                Group ID <span style={{ fontWeight: '400', color: '#6b7280' }}>(used in OSC commands, e.g. "kh")</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g., kh"
+                value={newGroupName}
+                onChange={(e) => setNewGroupName(e.target.value.toLowerCase().replace(/\s/g, ''))}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', fontSize: '14px' }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontWeight: '600', marginBottom: '6px', fontSize: '13px' }}>
+                Display Name <span style={{ fontWeight: '400', color: '#6b7280' }}>(shown in UI, e.g. "PERFORMER")</span>
+              </label>
+              <input
+                type="text"
+                placeholder="e.g., PERFORMER"
+                value={newGroupDisplayName || ''}
+                onChange={(e) => setNewGroupDisplayName(e.target.value.toUpperCase())}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', fontSize: '14px' }}
+              />
+            </div>
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', fontWeight: '600', marginBottom: '6px', fontSize: '13px' }}>
+                Identify Color
+              </label>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                  {['r', 'g', 'b'].map(channel => (
+                    <div key={channel} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ width: '12px', fontWeight: '600', fontSize: '12px', color: channel === 'r' ? '#ef4444' : channel === 'g' ? '#22c55e' : '#3b82f6' }}>
+                        {channel.toUpperCase()}
+                      </span>
+                      <input
+                        type="range" min="0" max="255"
+                        value={newGroupColor[channel]}
+                        onChange={(e) => setNewGroupColor({ ...newGroupColor, [channel]: parseInt(e.target.value) })}
+                        style={{ flex: 1 }}
+                      />
+                      <span style={{ width: '30px', fontSize: '12px', textAlign: 'right' }}>{newGroupColor[channel]}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{
+                  width: '48px', height: '48px', borderRadius: '50%', flexShrink: 0,
+                  backgroundColor: `rgb(${newGroupColor.r}, ${newGroupColor.g}, ${newGroupColor.b})`,
+                  border: '2px solid #e5e7eb',
+                  boxShadow: `0 0 12px rgb(${newGroupColor.r}, ${newGroupColor.g}, ${newGroupColor.b})`
+                }} />
+              </div>
+            </div>
+            <button
+              onClick={async () => {
+                if (!newGroupName) { alert('Please enter a group name'); return }
+                if (groupCount >= 8) { alert('Maximum 8 groups reached'); return }
+                if (effectiveGroups[newGroupName]) { alert('Group already exists'); return }
+                await onSaveGroup(newGroupName, newGroupColor.r, newGroupColor.g, newGroupColor.b, newGroupDisplayName || newGroupName.toUpperCase())
+                setNewGroupDisplayName('')
+                setShowCreateGroup(false)
+                setNewGroupName('')
+                setNewGroupColor({ r: 255, g: 255, b: 255 })
+              }}
+              style={{
+                width: '100%', padding: '12px', backgroundColor: '#22c55e',
+                color: 'white', border: 'none', borderRadius: '6px',
+                fontSize: '14px', fontWeight: '600', cursor: 'pointer'
+              }}
+            >
+              Create Group
+            </button>
+          </div>
+        </div>
+      )}
+      {editingGroup && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+          display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000
+        }}>
+          <div style={{
+            backgroundColor: 'white', padding: '32px', borderRadius: '12px',
+            width: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+              <h2 style={{ margin: 0 }}>Edit Group: {editingGroup.name}</h2>
+              <button onClick={() => setEditingGroup(null)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '24px' }}>×</button>
+            </div>
+
+            <div style={{ marginBottom: '16px' }}>
+              <label style={{ display: 'block', fontWeight: '600', marginBottom: '6px', fontSize: '13px' }}>Display Name</label>
+              <input
+                type="text"
+                value={editGroupForm.displayName}
+                onChange={(e) => setEditGroupForm({ ...editGroupForm, displayName: e.target.value.toUpperCase() })}
+                style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e0', fontSize: '14px' }}
+              />
+            </div>
+
+            <div style={{ marginBottom: '24px' }}>
+              <label style={{ display: 'block', fontWeight: '600', marginBottom: '6px', fontSize: '13px' }}>Identify Color</label>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1 }}>
+                  {['r', 'g', 'b'].map(channel => (
+                    <div key={channel} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ width: '12px', fontWeight: '600', fontSize: '12px', color: channel === 'r' ? '#ef4444' : channel === 'g' ? '#22c55e' : '#3b82f6' }}>
+                        {channel.toUpperCase()}
+                      </span>
+                      <input
+                        type="range" min="0" max="255"
+                        value={editGroupForm[channel]}
+                        onChange={(e) => setEditGroupForm({ ...editGroupForm, [channel]: parseInt(e.target.value) })}
+                        style={{ flex: 1 }}
+                      />
+                      <span style={{ width: '30px', fontSize: '12px', textAlign: 'right' }}>{editGroupForm[channel]}</span>
+                    </div>
+                  ))}
+                </div>
+                <div style={{
+                  width: '48px', height: '48px', borderRadius: '50%', flexShrink: 0,
+                  backgroundColor: `rgb(${editGroupForm.r}, ${editGroupForm.g}, ${editGroupForm.b})`,
+                  border: '2px solid #e5e7eb',
+                  boxShadow: `0 0 12px rgb(${editGroupForm.r}, ${editGroupForm.g}, ${editGroupForm.b})`
+                }} />
+              </div>
+            </div>
+
+            <button
+              onClick={async () => {
+                await onSaveGroup(
+                  editingGroup.name,
+                  editGroupForm.r,
+                  editGroupForm.g,
+                  editGroupForm.b,
+                  editGroupForm.displayName
+                )
+                setEditingGroup(null)
+              }}
+              style={{
+                width: '100%', padding: '12px', backgroundColor: '#22c55e',
+                color: 'white', border: 'none', borderRadius: '6px',
+                fontSize: '14px', fontWeight: '600', cursor: 'pointer'
+              }}
+            >
+              Save Changes
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Back Button */}
+      <div style={{ marginBottom: '20px' }}>
+        <button
+          onClick={onBack}
+          style={{
+            backgroundColor: '#ffffff', color: '#4a5568',
+            border: '1px solid #e2e8f0', padding: '10px 16px',
+            borderRadius: '6px', fontSize: '14px', fontWeight: '500',
+            cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px'
+          }}
+        >
+          <span>←</span> Back to Bridges
+        </button>
+      </div>
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <h2 style={{ margin: 0 }}>Headlamp Management</h2>
+          <span style={{
+            padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: '600',
+            backgroundColor: Object.values(headlampData).some(u => !u.unreachable) ? '#e8f5e9' : '#ffebee',
+            color: Object.values(headlampData).some(u => !u.unreachable) ? '#2e7d32' : '#c62828',
+            border: `1px solid ${Object.values(headlampData).some(u => !u.unreachable) ? '#4CAF50' : '#ff4444'}`
+          }}>
+            {Object.values(headlampData).filter(u => !u.unreachable).length} ONLINE
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <button
+            onClick={() => setShowNetworkSettings(true)}
+            style={{
+              backgroundColor: '#f0f0f0', color: '#4a5568',
+              border: '1px solid #e2e8f0', padding: '4px 20px',
+              borderRadius: '6px', fontSize: '12px', fontWeight: '500', cursor: 'pointer'
+            }}
+          >
+            Network Settings
+          </button>
+          <button
+            onClick={async () => {
+              if (identifyingAll) {
+                await window.electronAPI.sendOSCToHeadlamps('/all/restore', [])
+                setIdentifyingAll(false)
+                setIdentifyingGroups({})
+              } else {
+                await window.electronAPI.sendOSCToHeadlamps('/all/identify', [])
+                setIdentifyingAll(true)
+              }
+            }}
+            style={{
+              backgroundColor: identifyingAll ? '#f59e0b' : '#22c55e',
+              color: 'white', border: 'none',
+              padding: '4px 20px', borderRadius: '6px', fontSize: '12px',
+              fontWeight: '500', cursor: 'pointer'
+            }}
+          >
+            {identifyingAll ? 'Restore All' : 'Identify All'}
+          </button>
+          <button
+            onClick={async () => {
+              if (!confirm('Update all headlamps via OTA? They will reboot after updating.')) return
+              const result = await window.electronAPI.runOTAUpdate()
+              if (!result.success) alert('Failed to start OTA update: ' + result.error)
+            }}
+            style={{
+              backgroundColor: 'white', color: '#22c55e',
+              border: '1px solid #22c55e', borderRadius: '6px', cursor: 'pointer',
+              padding: '4px 20px', borderRadius: '6px', fontSize: '12px',
+              fontWeight: '500', cursor: 'pointer'
+            }}
+          >
+            Update Firmware
+          </button>
+        </div>
+      </div>
+
+      {/* Stats Row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px', marginBottom: '24px' }}>
+        <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', padding: '16px', borderRadius: '8px' }}>
+          <div style={{ fontSize: '11px', color: '#718096', marginBottom: '4px', textTransform: 'uppercase' }}>Network</div>
+          <div style={{ fontSize: '16px', fontWeight: '600' }}>Apt.41 WIFI</div>
+          <div style={{ fontSize: '12px', color: '#a0aec0', fontFamily: 'monospace' }}>
+            {Object.values(headlampData)[0]?.ip.split('.').slice(0,3).join('.') + '.x' || '—'}
+          </div>
+        </div>
+        <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', padding: '16px', borderRadius: '8px' }}>
+          <div style={{ fontSize: '11px', color: '#718096', marginBottom: '4px', textTransform: 'uppercase' }}>Total Units</div>
+          <div style={{ fontSize: '24px', fontWeight: '700' }}>{units.length}</div>
+        </div>
+        <div style={{ backgroundColor: 'white', border: '1px solid #e2e8f0', padding: '16px', borderRadius: '8px' }}>
+          <div style={{ fontSize: '11px', color: '#718096', marginBottom: '4px', textTransform: 'uppercase' }}>Groups</div>
+          <div style={{ fontSize: '24px', fontWeight: '700' }}>{groupCount}<span style={{ fontSize: '14px', color: '#9ca3af' }}>/8</span></div>
+        </div>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '20px' }}>
+        
+        {/* Left: Unassigned */}
+        <div style={{ backgroundColor: '#f9f9f9', padding: '15px', borderRadius: '8px' }}>
+          <h3 style={{ marginTop: 0 }}>Available Units</h3>
+          {unassignedUnits.length === 0 ? (
+            <p style={{ color: '#666', fontSize: '13px' }}>All units are assigned to groups</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {unassignedUnits.map(unit => (
+                <div key={unit.unitNumber}>
+                  <UnitCard unit={unit} />
+                  <select
+                    onChange={async (e) => {
+                      if (!e.target.value) return
+                      await onAssignUnit(unit.unitNumber, e.target.value)
+                      setTimeout(async () => {
+                        await window.electronAPI.sendOSCToHeadlamps(`/unit/${unit.unitNumber}/restore`, [])
+                      }, 2000)
+                    }}
+                    value=""
+                    style={{ marginTop: '4px', width: '100%', padding: '4px', fontSize: '12px', borderRadius: '4px', border: '1px solid #cbd5e0' }}
+                  >
+                    <option value="">Assign to group...</option>
+                    {Object.keys(effectiveGroups).map(g => (
+                      <option key={g} value={g}>{effectiveGroups[g]?.displayName || g.toUpperCase()}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Right: Groups */}
+        <div>
+          {/* Create Group */}
+          <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#e8f5e9', borderRadius: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3 style={{ margin: 0 }}>Groups ({groupCount}/8)</h3>
+              <button
+                onClick={() => {
+                  if (groupCount >= 8) { alert('Maximum 8 groups reached'); return }
+                  setShowCreateGroup(true)
+                }}
+                disabled={groupCount >= 8}
+                style={{
+                  backgroundColor: groupCount >= 8 ? '#cbd5e0' : '#22c55e',
+                  color: 'white', border: 'none', padding: '8px 16px',
+                  borderRadius: '6px', fontSize: '14px', fontWeight: '500',
+                  cursor: groupCount >= 8 ? 'not-allowed' : 'pointer'
+                }}
+              >
+                + Create Group
+              </button>
+            </div>
+            {groupCount >= 8 && (
+              <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#e53e3e' }}>
+                Maximum 8 groups reached. Delete a group to create a new one.
+              </p>
+            )}
+          </div>
+
+          {/* Group Cards */}
+          {Object.values(effectiveGroups).map(group => {
+            const groupUnits = units.filter(u => u.group === group.name)
+            const onlineCount = groupUnits.filter(u => !u.unreachable).length
+            const groupColor = getGroupColor(group.name)
+            const rgb = getGroupRGB(group)
+
+            return (
+              <div key={group.name} style={{
+                  padding: '20px',
+                  marginBottom: '20px',
+                  borderRadius: '12px',
+                  backgroundColor: 'white',
+                  boxShadow: `0 0 5px 4px rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.3), 0 2px 8px rgba(0,0,0,0.08)`,
+                  border: `1px solid rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 0.4)`
+                }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '20px', height: '20px', borderRadius: '50%',
+                      backgroundColor: groupColor, border: '2px solid #e5e7eb',
+                      boxShadow: `0 0 8px ${groupColor}`
+                    }} />
+                    <h4 style={{ margin: 0, fontSize: '18px' }}>{group.displayName || group.name.toUpperCase()}</h4>
+                    <span style={{ fontSize: '12px', color: '#6b7280' }}>
+                      {groupUnits.length} unit{groupUnits.length !== 1 ? 's' : ''} · {onlineCount} online
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      onClick={async () => {
+                        if (identifyingGroups[group.name]) {
+                          await window.electronAPI.sendOSCToHeadlamps(`/${group.name}/restore`, [])
+                          setIdentifyingGroups({ ...identifyingGroups, [group.name]: false })
+                        } else {
+                          await window.electronAPI.sendOSCToHeadlamps(`/${group.name}/identify`, [])
+                          setIdentifyingGroups({ ...identifyingGroups, [group.name]: true })
+                        }
+                      }}
+                      style={{
+                        backgroundColor: identifyingGroups[group.name] ? '#f59e0b' : '#3b82f6',
+                        color: 'white', border: 'none',
+                        padding: '5px 10px', borderRadius: '4px', fontSize: '12px', cursor: 'pointer'
+                      }}
+                    >
+                      {identifyingGroups[group.name] ? 'Restore' : 'Identify'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingGroup(group)
+                        setEditGroupForm({
+                          displayName: group.displayName || group.name.toUpperCase(),
+                          r: group.r || 0,
+                          g: group.g || 0,
+                          b: group.b || 0
+                        })
+                      }}
+                      style={{
+                        backgroundColor: '#f59e0b', color: 'white', border: 'none',
+                        padding: '5px 10px', borderRadius: '4px', fontSize: '12px', cursor: 'pointer'
+                      }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (confirm(`Delete group "${group.name}"? Units will become unassigned.`)) {
+                          onDeleteGroup(group.name)
+                        }
+                      }}
+                      style={{
+                        backgroundColor: '#ff4444', color: 'white', border: 'none',
+                        padding: '5px 10px', borderRadius: '4px', fontSize: '12px', cursor: 'pointer'
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+
+                {groupUnits.length === 0 ? (
+                  <p style={{ color: '#999', fontStyle: 'italic', fontSize: '13px' }}>No units in this group</p>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px' }}>
+                    {groupUnits.map(unit => (
+                     <div key={unit.unitNumber}>
+                      <UnitCard unit={unit} />
+                      {settingNumberFor === unit.mac ? (
+                        <div style={{ marginTop: '4px', display: 'flex', gap: '4px' }}>
+                          <input
+                            type="number"
+                            placeholder="New number"
+                            value={newUnitNumber}
+                            onChange={(e) => setNewUnitNumber(e.target.value)}
+                            style={{ flex: 1, padding: '4px 8px', borderRadius: '4px', border: '1px solid #cbd5e0', fontSize: '12px' }}
+                          />
+                          <button
+                            onClick={async () => {
+                              await window.electronAPI.removeHeadlampUnit(unit.unitNumber)
+                              await window.electronAPI.sendOSCToHeadlamps(`/unit/${unit.mac}/setnumber`, [
+                                { type: 'integer', value: parseInt(newUnitNumber) }
+                              ])
+                              // Update fleet data to reflect new unit number
+                              const fleetEntry = Object.values(headlampFleet).find(f => f.mac === unit.mac)
+                              if (fleetEntry) {
+                                onUpdateFleetEntry(unit.mac, { ...fleetEntry, unitNumber: parseInt(newUnitNumber) })
+                              }
+                              setSettingNumberFor(null)
+                              setNewUnitNumber('')
+                            }}
+                            
+                            style={{
+                              padding: '4px 8px', backgroundColor: '#22c55e', color: 'white',
+                              border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer'
+                            }}
+                          >
+                            Set
+                          </button>
+                          <button
+                            onClick={() => { setSettingNumberFor(null); setNewUnitNumber('') }}
+                            style={{
+                              padding: '4px 8px', backgroundColor: '#e5e7eb', color: '#4a5568',
+                              border: 'none', borderRadius: '4px', fontSize: '12px', cursor: 'pointer'
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setSettingNumberFor(unit.mac); setNewUnitNumber('') }}
+                          style={{
+                            marginTop: '4px', width: '100%', padding: '3px',
+                            backgroundColor: 'transparent', color: '#9ca3af',
+                            border: '1px solid #e5e7eb', borderRadius: '4px',
+                            fontSize: '11px', cursor: 'pointer'
+                          }}
+                        >
+                          Set Unit Number
+                        </button>
+                      )}
+                      <button
+                        onClick={() => onAssignUnit(unit.unitNumber, 'unassigned')}
+                        style={{
+                          marginTop: '4px', width: '100%', padding: '3px',
+                          backgroundColor: 'transparent', color: '#9ca3af',
+                          border: '1px solid #e5e7eb', borderRadius: '4px',
+                          fontSize: '11px', cursor: 'pointer'
+                        }}
+                      >
+                        Remove from group
+                      </button>
+                    </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+
+          {Object.keys(headlampGroups).length === 0 && (
+            <p style={{ textAlign: 'center', color: '#9ca3af', padding: '40px' }}>
+              No groups yet. Create your first group above.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function App() {
 
 const style = document.createElement('style')
@@ -2698,6 +4671,11 @@ document.head.appendChild(style)
   const [diagnosticsBridge, setDiagnosticsBridge] = React.useState(null)
   const [diagnosticResults, setDiagnosticResults] = React.useState({})
   const [runningDiagnostics, setRunningDiagnostics] = React.useState(false)
+  // Headlamp management
+  const [headlampData, setHeadlampData] = React.useState({})
+  const [headlampFleet, setHeadlampFleet] = React.useState({})
+  const [headlampGroups, setHeadlampGroups] = React.useState({})
+  const [venueMap, setVenueMap] = React.useState({ imageData: null, seats: {} })
   
 
   const loadAllBridgeGroups = React.useCallback(async () => {
@@ -2777,6 +4755,16 @@ React.useEffect(() => {
       if (result.content.groupV2Ids) {
         localStorage.setItem('group_v2_ids', JSON.stringify(result.content.groupV2Ids))
       }
+
+      if (result.content.headlampFleet) {
+        setHeadlampFleet(result.content.headlampFleet)
+      }
+      if (result.content.headlampGroups) {
+        setHeadlampGroups(result.content.headlampGroups)
+      }
+      if (result.content.venueMap) {
+        setVenueMap(result.content.venueMap)
+      }
     } else {
       console.log('Config file not found, using localStorage:', result.error)
       // Fall back to localStorage (loads existing bridges from localStorage in useState)
@@ -2792,7 +4780,7 @@ React.useEffect(() => {
   if (bridges.length > 0 || installations.length > 0 || Object.keys(fleetDatabase).length > 0) {
     saveConfigToFile()
   }
-}, [bridges, installations, fleetDatabase])
+}, [bridges, installations, fleetDatabase, headlampFleet, headlampGroups, venueMap])
 
 React.useEffect(() => {
   const connectedBridges = bridges.filter(b => b.connected && b.username);
@@ -2948,6 +4936,9 @@ const saveConfigToFile = async () => {
     installations,
     fleetDatabase: JSON.parse(localStorage.getItem('fleet_database') || '{}'),
     groupV2Ids: JSON.parse(localStorage.getItem('group_v2_ids') || '{}'),
+    headlampFleet,
+    headlampGroups,
+    venueMap,
     lastUpdated: new Date().toISOString()
   }
   
@@ -3184,6 +5175,12 @@ React.useEffect(() => {
   }
 }, [])
 
+React.useEffect(() => {
+  window.electronAPI.onHeadlampUpdate((data) => {
+    setHeadlampData(data)
+  })
+}, [])
+
 const saveInstallations = (newInstallation) => {
   setInstallations(newInstallation)
   localStorage.setItem('installations', JSON.stringify(newInstallation))
@@ -3371,6 +5368,37 @@ const handleDeleteLight = async (lightId) => {
     console.error('Error deleting light:', error)
     alert('Failed to delete light: ' + error.message)
   }
+}
+
+const handleUpdateHeadlamp = (mac, updates) => {
+  const newFleet = { ...headlampFleet, [mac]: updates }
+  setHeadlampFleet(newFleet)
+}
+
+const handleDeleteHeadlamp = (mac) => {
+  const newFleet = { ...headlampFleet }
+  delete newFleet[mac]
+  setHeadlampFleet(newFleet)
+}
+
+const handleSaveHeadlampGroup = async (name, r, g, b, displayName) => {
+  const newGroups = { 
+    ...headlampGroups, 
+    [name]: { name, r, g, b, displayName: displayName || name.toUpperCase() } 
+  }
+  setHeadlampGroups(newGroups)
+  await window.electronAPI.sendOSCToHeadlamps('/all/setgroupcolor', [
+    { type: 'string', value: name },
+    { type: 'integer', value: r },
+    { type: 'integer', value: g },
+    { type: 'integer', value: b }
+  ])
+}
+
+const handleDeleteHeadlampGroup = (name) => {
+  const newGroups = { ...headlampGroups }
+  delete newGroups[name]
+  setHeadlampGroups(newGroups)
 }
 
 const generateQlabScript = (groupId) => {
@@ -4082,6 +6110,34 @@ return (
         Live Monitor
       </button>
 
+      <button 
+        onClick={() => setCurrentPage('headlamps')}
+        style={{
+          backgroundColor: currentPage === 'headlamps' ? '#22c55e' : 'transparent',
+          color: currentPage === 'headlamps' ? 'white' : '#4a5568',
+          border: 'none',
+          padding: '10px 24px',
+          borderRadius: '6px 6px 0 0',
+          fontSize: '14px',
+          fontWeight: '500',
+          cursor: 'pointer',
+          transition: 'all 0.2s',
+          borderBottom: currentPage === 'headlamps' ? '2px solid #22c55e' : 'none',
+          marginBottom: '-2px'
+        }}
+        onMouseEnter={(e) => {
+          if (currentPage !== 'headlamps') {
+            e.target.style.backgroundColor = '#f7fafc'
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (currentPage !== 'headlamps') {
+            e.target.style.backgroundColor = 'transparent'
+          }
+        }}
+      >
+        Headlamp Monitor
+      </button>
     </div>
 
 {/* Tab Content */}
@@ -4120,6 +6176,10 @@ return (
     installations={installations}
     onAddInstallation={handleAddInstallation}
     onRemoveInstallation={handleRemoveInstallation}
+    headlampFleet={headlampFleet}
+    headlampData={headlampData}
+    onUpdateHeadlamp={handleUpdateHeadlamp}
+    onDeleteHeadlamp={handleDeleteHeadlamp}
   />
 )}
 
@@ -4128,6 +6188,45 @@ return (
     bridges={bridges}
     allLoadedGroups={allLoadedGroups}
     allLoadedLights={allLoadedLights}
+  />
+)}
+
+{currentPage === 'headlamps' && (
+  <HeadlampsPage
+    headlampData={headlampData}
+    headlampFleet={headlampFleet}
+    headlampGroups={headlampGroups}
+    venueMap={venueMap}
+    onUpdateVenueMap={(newMap) => setVenueMap(newMap)}
+    onRegister={(mac, data) => {
+      const newFleet = { ...headlampFleet, [mac]: data }
+      setHeadlampFleet(newFleet)
+    }}
+    onSendOSC={async (address, args) => {
+      await window.electronAPI.sendOSCToHeadlamps(address, args)
+    }}
+    installations={installations}
+  />
+)}
+
+{currentPage === 'headlampManager' && (
+  <HeadlampManagerPage
+    headlampData={headlampData}
+    headlampFleet={headlampFleet}
+    headlampGroups={headlampGroups}
+    onSaveGroup={handleSaveHeadlampGroup}
+    onDeleteGroup={handleDeleteHeadlampGroup}
+    onAssignUnit={async (unitNumber, groupName) => {
+      await window.electronAPI.sendOSCToHeadlamps(`/unit/${unitNumber}/assign`, [
+        { type: 'string', value: groupName }
+      ])
+    }}
+    onBack={() => setCurrentPage('bridges')}
+    installations={installations}
+    onUpdateFleetEntry={(mac, data) => {
+      const newFleet = { ...headlampFleet, [mac]: data }
+      setHeadlampFleet(newFleet)
+    }}
   />
 )}
 
@@ -4210,6 +6309,51 @@ return (
 
           <div style={{ marginTop: '20px' }}>
             <h2>Installation Bridges:</h2>
+            {/* Headlamps Card */}
+              <div style={{ 
+                border: '1px solid #ddd', 
+                padding: '15px', 
+                marginBottom: '10px',
+                borderRadius: '8px',
+                backgroundColor: 'white'
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <h3 style={{ margin: 0 }}>Headlamps</h3>
+                      <span style={{
+                        display: 'inline-block',
+                        width: '12px',
+                        height: '12px',
+                        borderRadius: '50%',
+                        backgroundColor: Object.values(headlampData).some(u => !u.unreachable) ? '#4CAF50' : '#ff4444',
+                        border: `2px solid ${Object.values(headlampData).some(u => !u.unreachable) ? '#45a049' : '#cc0000'}`,
+                        animation: Object.values(headlampData).some(u => !u.unreachable) ? 'pulse 2s infinite' : 'none'
+                      }} />
+                    </div>
+                    <p style={{ margin: '5px 0', fontSize: '14px', color: '#666' }}>
+                      {Object.values(headlampData).filter(u => !u.unreachable).length} online · {Object.keys(headlampFleet).length} registered · {Object.keys(headlampGroups).length}/8 groups
+                    </p>
+                    <p style={{ margin: '5px 0', fontSize: '12px', color: '#999' }}>
+                      Network: {Object.values(headlampData)[0]?.ip.split('.').slice(0,3).join('.') + '.x' || 'No units online'} · Apt.41 WIFI
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setCurrentPage('headlampManager')}
+                    style={{
+                      backgroundColor: '#22c55e',
+                      color: 'white',
+                      border: 'none',
+                      padding: '5px 15px',
+                      borderRadius: '4px',
+                      fontSize: '13px',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    Manage Headlamps →
+                  </button>
+                </div>
+              </div>
             {bridges.map(bridge => (
               <div key={bridge.id} style={{ 
                 border: '1px solid #ddd', 
@@ -4235,6 +6379,7 @@ return (
                   )}
                 </div>
                 <p style={{ margin: '5px 0' }}>IP: {bridge.ip}</p>
+
                 {/* Installation Selector */}
                   <div style={{ margin: '8px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontSize: '12px', color: '#666', fontWeight: '500' }}>Installation:</span>
@@ -4347,6 +6492,23 @@ return (
           </div>
         </>
       )}
+
+{currentPage === 'headlampManager' && (
+  <HeadlampManagerPage
+    headlampData={headlampData}
+    headlampFleet={headlampFleet}
+    headlampGroups={headlampGroups}
+    onSaveGroup={handleSaveHeadlampGroup}
+    onDeleteGroup={handleDeleteHeadlampGroup}
+    onAssignUnit={async (unitNumber, groupName) => {
+      await window.electronAPI.sendOSCToHeadlamps(`/unit/${unitNumber}/assign`, [
+        { type: 'string', value: groupName }
+      ])
+    }}
+    onBack={() => setCurrentPage('bridges')}
+    installations={installations}
+  />
+)}
 
 {selectedBridge && (
   <div>

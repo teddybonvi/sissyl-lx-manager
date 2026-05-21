@@ -2,6 +2,42 @@
 
 All notable changes to Sister Sylvester LX Manager will be documented in this file.
 
+## [1.2.0] - 2026-05-21
+
+### Added - Headlamp Management System
+- Full headlamp discovery and status monitoring via UDP/OSC (port 5001)
+- Headlamp fleet registration and management
+- Group management with display names and custom RGB colors (8 groups max)
+- Live unit cards with battery percentage, color display, and effect badges
+- Multi-select control panel with RGB sliders (Fine/Full mode), fade, and FX controls
+- Venue map overlay with seat placement and unit assignment
+- OTA firmware updates (single unit and fleet-wide)
+- Network settings management via OSC
+- Unreachable detection (30s timeout with visual indicators)
+- Identify/Restore toggle functionality (group and global)
+- Headlamp Manager page accessed from Bridge Manager
+- Integration with ESP8266-based wireless headlamp units
+- Battery monitoring with voltage divider on A0
+- Firmware version tracking and display
+- Group sync on seat assignment (restore after 2000ms)
+
+### Changed
+- Expanded config file structure to include headlampFleet, headlampGroups, and venueMap
+- Updated preload.js with headlamp-specific IPC handlers
+- Added UDP server on port 5001 for headlamp status broadcasts
+- Enhanced Fleet Manager with headlamps section
+- Major version bump due to significant new functionality
+
+### Technical Details
+- OSC library for headlamp communication
+- pdf.js integration for venue map PDF uploads
+- Dynamic laptop IP detection for OTA updates
+- EEPROM-based group table storage on headlamp units
+- 16-sample battery averaging with configurable resistor dividers
+- Color normalization (ceiling=50) for display consistency
+
+---
+
 ## [1.1.6] - 2026-04-08
 
 ### Added

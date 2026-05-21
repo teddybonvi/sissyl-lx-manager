@@ -1,13 +1,16 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
-import { spawn } from 'child_process'
+import { spawn, exec } from 'child_process'
 import { writeFileSync, readFileSync } from 'fs'
+import { networkInterfaces } from 'os'
 import express from 'express'
 import cors from 'cors'
 import https from 'https'
 import pkg from 'electron-updater'
 import osc from 'osc'
+import dgram from 'dgram'
+
 
 const { autoUpdater } = pkg
 
@@ -19,6 +22,20 @@ let serverProcess
 // Shared data store for remote monitoring
 let monitorData = {
   bridges: []
+}
+let headlampData = {}
+let headlampLiveCache = {}
+
+function getLaptopIP() {
+  const nets = networkInterfaces()
+  for (const name of Object.keys(nets)) {
+    for (const net of nets[name]) {
+      if (net.family === 'IPv4' && !net.internal) {
+        return net.address
+      }
+    }
+  }
+  return 'localhost'
 }
 
 function createWindow() {
@@ -636,6 +653,132 @@ oscServer.on("message", async (oscMsg) => {
   global.oscClient = oscClient
 }
 
+function startHeadlampListener() {
+  const headlampSocket = dgram.createSocket('udp4')
+  
+  headlampSocket.on('message', (msg, rinfo) => {
+    const data = parseHeadlampOSC(msg)
+    if (!data) return
+    
+    if (data.address.startsWith('/headlamp/status/')) {
+      const unitNumber = parseInt(data.address.split('/')[3])
+      
+      const newUnitData = {
+        unitNumber,
+        group: data.args[1] || 'unknown',
+        battery: data.args[2] || 0,
+        vcc: data.args[3] || 0,
+        r: data.args[4] || 0,
+        g: data.args[5] || 0,
+        b: data.args[6] || 0,
+        effectType: data.args[7] || 0,
+        strobeRate: data.args[8] || 0,
+        pulseRate: data.args[9] || 0,
+        strobing: data.args[10] === 1,
+        pulsing: data.args[11] === 1,
+        fading: data.args[12] === 1,
+        mac: data.args[13] || 'unknown',
+        ip: rinfo.address,
+        firmware: data.args[14] || 'unknown',
+        lastSeen: Date.now()
+      }
+      
+      // Remove old entry if this MAC was previously a different unit number
+      const existingEntry = Object.values(headlampData).find(u => u.mac === newUnitData.mac && u.unitNumber !== unitNumber)
+      if (existingEntry) {
+        delete headlampData[existingEntry.unitNumber]
+        delete headlampLiveCache[existingEntry.unitNumber]
+      }
+
+      headlampData[unitNumber] = {
+        ...headlampLiveCache[unitNumber],
+        ...newUnitData,
+        unreachable: false
+      }
+      headlampLiveCache[unitNumber] = headlampData[unitNumber]
+      
+      if (mainWindow) {
+        mainWindow.webContents.send('headlamp-update', headlampData)
+      }
+    }
+  })
+  
+  headlampSocket.bind(5001, () => {
+    console.log('Headlamp listener on port 5001')
+  })
+
+  setInterval(checkHeadlampStaleness, 5000)
+  
+  global.headlampSocket = headlampSocket
+}
+
+function parseHeadlampOSC(buffer) {
+  try {
+    let offset = 0
+    
+    // Read address
+    let address = ''
+    while (offset < buffer.length && buffer[offset] !== 0) {
+      address += String.fromCharCode(buffer[offset])
+      offset++
+    }
+    // Pad to 4-byte boundary
+    offset = Math.ceil((offset + 1) / 4) * 4
+    
+    // Skip type tag string
+    let types = ''
+    if (buffer[offset] === 44) { // ','
+      offset++
+      while (offset < buffer.length && buffer[offset] !== 0) {
+        types += String.fromCharCode(buffer[offset])
+        offset++
+      }
+      offset = Math.ceil((offset + 1) / 4) * 4
+    }
+
+    // Read args
+    const args = []
+    for (const type of types) {
+      if (type === 'i') {
+        args.push(buffer.readInt32BE(offset))
+        offset += 4
+      } else if (type === 'f') {
+        args.push(buffer.readFloatBE(offset))
+        offset += 4
+      } else if (type === 's') {
+        let str = ''
+        while (offset < buffer.length && buffer[offset] !== 0) {
+          str += String.fromCharCode(buffer[offset])
+          offset++
+        }
+        offset = Math.ceil((offset + 1) / 4) * 4
+        args.push(str)
+      } else if (type === 'd') {
+      args.push(buffer.readDoubleBE(offset))
+      offset += 8
+    }
+    }
+    
+    return { address, args }
+  } catch (e) {
+    return null
+  }
+}
+
+function checkHeadlampStaleness() {
+  let changed = false
+  Object.values(headlampData).forEach(unit => {
+    const isStale = Date.now() - unit.lastSeen > 45000
+    if (isStale && !unit.unreachable) {
+      headlampData[unit.unitNumber].unreachable = true
+      changed = true
+    }
+  })
+  if (changed && mainWindow) {
+    mainWindow.webContents.send('headlamp-update', headlampData)
+  }
+}
+
 function queryQlabStatus(oscClient) {
   // Ask Qlab what cue is selected
   oscClient.send({
@@ -735,9 +878,48 @@ ipcMain.handle('open-file', async () => {
   return { success: false }
 })
 
+ipcMain.handle('send-osc-to-headlamps', async (event, address, args) => {
+  try {
+    const oscPort = new osc.UDPPort({
+      localAddress: '0.0.0.0',
+      localPort: 0,
+      remoteAddress: '255.255.255.255',
+      remotePort: 5000,
+      broadcast: true,
+      metadata: true
+    })
+
+    oscPort.open()
+    oscPort.on('ready', () => {
+    const formattedArgs = (args || []).map(arg => {
+      if (typeof arg === 'string') return { type: 's', value: arg }
+      if (typeof arg === 'number') return { type: 'i', value: arg }
+      if (arg.type === 'string') return { type: 's', value: arg.value }
+      if (arg.type === 'integer') return { type: 'i', value: arg.value }
+      if (arg.type === 'float') return { type: 'f', value: arg.value }
+      return { type: 's', value: String(arg) }
+    })
+
+    const message = { address, args: formattedArgs }
+    oscPort.send(message)
+    setTimeout(() => oscPort.send(message), 100)
+    setTimeout(() => oscPort.send(message), 250)
+    setTimeout(() => oscPort.send(message), 500)
+    setTimeout(() => oscPort.send(message), 800)
+    setTimeout(() => oscPort.close(), 1300)
+  })
+
+    return { success: true }
+  } catch (error) {
+    console.error('OSC send error:', error)
+    return { success: false, error: error.message }
+  }
+})
+
 app.whenReady().then(() => {
   startProxyServer()
   startOSCServer()
+  startHeadlampListener()
   
   // Wait a bit for server to start, then create window
   setTimeout(createWindow, 2000)
@@ -763,6 +945,84 @@ app.on('window-all-closed', () => {
 app.on('before-quit', () => {
   if (serverProcess) {
     serverProcess.kill()
+  }
+})
+
+ipcMain.handle('remove-headlamp-unit', async (event, unitNumber) => {
+  delete headlampData[unitNumber]
+  if (mainWindow) {
+    mainWindow.webContents.send('headlamp-update', headlampData)
+  }
+  return { success: true }
+})
+
+ipcMain.handle('run-ota-update', async (event) => {
+  try {
+    exec('bash "/Users/ettiebonvissuto/Documents/PlatformIO/Projects/sisyl headlamp/update.sh" > /tmp/ota.log 2>&1', (error) => {
+      if (error) console.error('OTA script error:', error)
+    })
+    
+    // Wait 15 seconds then send the OTA command
+    setTimeout(async () => {
+      const ip = Object.values(headlampData)[0]?.ip?.split('.').slice(0,3).join('.') + '.168'
+      // Send via OSC
+      const oscPort = new osc.UDPPort({
+        localAddress: '0.0.0.0',
+        localPort: 0,
+        remoteAddress: '255.255.255.255',
+        remotePort: 5000,
+        broadcast: true,
+        metadata: true
+      })
+      oscPort.open()
+      oscPort.on('ready', () => {
+        const message = {
+          address: '/all/ota-update',
+          args: [{ type: 's', value: url }]
+        }
+        oscPort.send(message)
+        setTimeout(() => oscPort.send(message), 50)
+        setTimeout(() => oscPort.send(message), 100)
+        setTimeout(() => oscPort.close(), 600)
+      })
+    }, 15000)
+    
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error.message }
+  }
+})
+
+ipcMain.handle('run-single-ota-update', async (event, unitNumber) => {
+  try {
+    exec('bash "/Users/ettiebonvissuto/Documents/PlatformIO/Projects/sisyl headlamp/update.sh" > /tmp/ota.log 2>&1', (error) => {
+      if (error) console.error('OTA script error:', error)
+    })
+
+    setTimeout(() => {
+      const laptopIP = getLaptopIP()
+      const url = `http://${laptopIP}:8080/firmware.bin`
+      const oscPort = new osc.UDPPort({
+        localAddress: '0.0.0.0', localPort: 0,
+        remoteAddress: '255.255.255.255', remotePort: 5000,
+        broadcast: true, metadata: true
+      })
+      oscPort.open()
+      oscPort.on('ready', () => {
+        const message = {
+          address: `/unit/${unitNumber}/ota-update`,
+          args: [{ type: 's', value: url }]
+        }
+        oscPort.send(message)
+        setTimeout(() => oscPort.send(message), 50)
+        setTimeout(() => oscPort.send(message), 100)
+        setTimeout(() => oscPort.close(), 600)
+      })
+    }, 15000)
+
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: error.message }
   }
 })
 
